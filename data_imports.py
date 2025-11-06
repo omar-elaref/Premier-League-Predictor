@@ -58,4 +58,96 @@ load_laliga_season(season_2022, "22-23")
 load_laliga_season(season_2023, "23-24")
 load_laliga_season(season_2024, "24-25")
 
+def create_home_row(row, match_num):
+    res = row.get("FTR", np.nan)
+    win, draw, lose = (np.nan, np.nan, np.nan)
+    if pd.notna(res):
+        if res == "H": win, draw, lose = 1, 0, 0
+        elif res == "D": win, draw, lose = 0, 1, 0
+        else: win, draw, lose = 0, 0, 1
+        
+        goals = row.get("FTHG", np.nan)
+        sot = row.get("HST", 0)
+        out = {
+            "match": match_num,
+            "ground": "H",
+            "Date": row.get("Date", np.nan),
+            "TeamAgainst": row.get("AwayTeam", np.nan),
+            "Goals": goals,
+            "GoalsConceded": row.get("FTAG", np.nan),
+            "HTGoals": row.get("HTHG", np.nan),
+            "HTResult": row.get("HTR", np.nan),
+            "Shots": row.get("HS", np.nan),
+            "ShotsAgainst": row.get("AS", np.nan),
+            "ShotsOnTarget": sot,
+            "ShotsAgainstOnTarget": row.get("AST", np.nan),
+            "Corners": row.get("HC", np.nan),
+            "CornersAgainst": row.get("AC", np.nan),
+            "FoulsCommitted": row.get("HF", np.nan),
+            "FoulsAgainst": row.get("AF", np.nan),
+            "YCards": row.get("HY", np.nan),
+            "YCardsAgainst": row.get("AY", np.nan),
+            "RCards": row.get("HR", np.nan),
+            "RCardsAgainst": row.get("AR", np.nan),
+            "Win": win, "Draw": draw, "Lose": lose,
+            "BigChancesCreated": (0 if pd.isna(goals) else goals) + (0 if pd.isna(sot) else sot)
+        }
+        
+        return pd.DataFrame([out], index=[match_num])
+    
 
+def create_away_row(row, match_num):
+    res = row.get("FTR", np.nan)
+    win, draw, lose = (np.nan, np.nan, np.nan)
+    if pd.notna(res):
+        if res == "A": win, draw, lose = 1, 0, 0
+        elif res == "D": win, draw, lose = 0, 1, 0
+        else: win, draw, lose = 0, 0, 1
+        
+        goals = row.get("FTHG", np.nan)
+        sot = row.get("HST", 0)
+        out = {
+            "match": match_num,
+            "ground": "A",
+            "Date": row.get("Date", np.nan),
+            "TeamAgainst": row.get("AwayTeam", np.nan),
+            "Goals": goals,
+            "GoalsConceded": row.get("FTAG", np.nan),
+            "HTGoals": row.get("HTHG", np.nan),
+            "HTResult": row.get("HTR", np.nan),
+            "Shots": row.get("HS", np.nan),
+            "ShotsAgainst": row.get("AS", np.nan),
+            "ShotsOnTarget": sot,
+            "ShotsAgainstOnTarget": row.get("AST", np.nan),
+            "Corners": row.get("HC", np.nan),
+            "CornersAgainst": row.get("AC", np.nan),
+            "FoulsCommitted": row.get("HF", np.nan),
+            "FoulsAgainst": row.get("AF", np.nan),
+            "YCards": row.get("HY", np.nan),
+            "YCardsAgainst": row.get("AY", np.nan),
+            "RCards": row.get("HR", np.nan),
+            "RCardsAgainst": row.get("AR", np.nan),
+            "Win": win, "Draw": draw, "Lose": lose,
+            "BigChancesCreated": (0 if pd.isna(goals) else goals) + (0 if pd.isna(sot) else sot)
+        }
+        
+        return pd.DataFrame([out], index=[match_num])
+    
+def build_away_table_for_team(team_name, season_key, season_dict):
+    df = season_dict[season_key]
+    sub = (df[df["AwayTeam"] == team_name]
+           .sort_values("Date")
+           .reset_index(drop=True))
+    if sub.empty:
+        return pd.DataFrame()
+
+    rows = [create_away_row(sub.loc[i], i + 1) for i in range(len(sub))]
+    out = pd.concat(rows)
+    out.insert(0, "Season", season_key)  # handy label
+    return out
+
+def build_away_dict_per_season(season_key, seasons_dict):
+    df = seasons_dict[season_key]
+    teams = sorted(df["AwayTeam"].dropna().unique())
+    return {t: build_away_table_for_team(t, season_key, seasons_dict) for t in teams}
+    
