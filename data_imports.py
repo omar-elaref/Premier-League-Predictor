@@ -150,4 +150,59 @@ def build_away_dict_per_season(season_key, seasons_dict):
     df = seasons_dict[season_key]
     teams = sorted(df["AwayTeam"].dropna().unique())
     return {t: build_away_table_for_team(t, season_key, seasons_dict) for t in teams}
-    
+
+def build_home_table_for_team(team_name, season_key, season_dict):
+    df = season_dict[season_key]
+    sub = (df[df["HomeTeam"] == team_name]
+           .sort_values("Date")
+           .reset_index(drop=True))
+    if sub.empty:
+        return pd.DataFrame()
+
+    rows = [create_home_row(sub.loc[i], i + 1) for i in range(len(sub))]
+    out = pd.concat(rows)
+    out.insert(0, "Season", season_key)  
+    return out
+
+def build_home_dict_per_season(season_key, seasons_dict):
+    df = seasons_dict[season_key]
+    teams = sorted(df["HomeTeam"].dropna().unique())
+    return {t: build_home_table_for_team(t, season_key, seasons_dict) for t in teams}
+
+# home_games_laliga = {sk: build_home_dict_per_season(sk, laliga_season_data) for sk in laliga_season_data.keys()}
+
+# print(home_games_laliga["24-25"]["Barcelona"])
+
+def build_team_year_stats(team_name, season_key, seasons_dict):
+    home_df = build_home_table_for_team(team_name, season_key, seasons_dict)
+    away_df = build_away_table_for_team(team_name, season_key, seasons_dict)
+    combined_df = pd.concat([home_df, away_df], ignore_index=True)
+    combined = {
+        "Wins": int(home_df["Win"].sum() + away_df["Win"].sum()),
+        "Draws": int(home_df["Draw"].sum() + away_df["Draw"].sum()),
+        "Losses": int(home_df["Lose"].sum() + away_df["Lose"].sum()),
+        "Goals": int(home_df["Goals"].sum() + away_df["GoalsConceded"].sum()),
+        "GoalsConceded": int(home_df["GoalsConceded"].sum() + away_df["Goals"].sum()),
+        "GoalDifference": int((home_df["Goals"].sum() + away_df["GoalsConceded"].sum()) - (home_df["GoalsConceded"].sum() + away_df["Goals"].sum())),
+        "GoalsFor": np.mean(combined_df["Goals"]),
+        "GoalsAgainst": np.mean(combined_df["GoalsConceded"]),
+        "ShotsFor": np.mean(combined_df["Shots"]),
+        "ShotsAgainst": np.mean(combined_df["ShotsAgainst"]),
+        "ShotsOnTargetFor": np.mean(combined_df["ShotsOnTarget"]),
+        "ShotsOnTargetAgainst": np.mean(combined_df["ShotsAgainstOnTarget"]),
+        "CornersFor": np.mean(combined_df["Corners"]),
+        "CornersAgainst": np.mean(combined_df["CornersAgainst"]),
+        "FoulsCommitted": np.mean(combined_df["FoulsCommitted"]),
+        "FoulsAgainst": np.mean(combined_df["FoulsAgainst"]),
+        "YellowCards": int(home_df["YCards"].sum() + away_df["YCards"].sum()),
+        "YellowCardsAgainst": int(home_df["YCardsAgainst"].sum() + away_df["YCardsAgainst"].sum()),
+        "RedCards": int(home_df["RCards"].sum() + away_df["RCards"].sum()),
+        "RedCardsAgainst": int(home_df["RCardsAgainst"].sum() + away_df["RCardsAgainst"].sum()),
+        "BigChancesCreated": np.mean(combined_df["BigChancesCreated"])
+    }
+    return pd.DataFrame([combined])
+
+# Example usage:
+stats = build_team_year_stats("Barcelona", "24-25", laliga_season_data)
+print(stats)
+
