@@ -199,7 +199,7 @@ def build_team_year_stats(team_name, season_key, seasons_dict):
         "RedCards": int(home_df["RCards"].sum() + away_df["RCards"].sum()),
         "RedCardsAgainst": int(home_df["RCardsAgainst"].sum() + away_df["RCardsAgainst"].sum()),
         "BigChancesCreated": np.mean(combined_df["BigChancesCreated"]),
-        "points": int(home_df["Win"].sum() * 3 + home_df["Draw"].sum() + away_df["Win"].sum() * 3 + away_df["Draw"].sum())
+        "Points": int(home_df["Win"].sum() * 3 + home_df["Draw"].sum() + away_df["Win"].sum() * 3 + away_df["Draw"].sum())
     }
     return pd.DataFrame([combined])
 
@@ -251,7 +251,13 @@ def build_season_team(season_key, season_dict):
 # Run the full database build
 laliga_database = build_season_team("24-25",laliga_season_data)
 print()
-# ✅ Access pattern examples
-#print("All seasons:", laliga_database.keys())
-print("Teams in 24-25:", laliga_database)
-#print("Barcelona stats in 24-25:\n", laliga_database["24-25"]["Barcelona"])
+
+combined_stats = []
+for team_name, team_df in laliga_database.items():
+    team_df_copy = team_df.copy()
+    team_df_copy.insert(0, "Team", team_name)
+    combined_stats.append(team_df_copy)
+
+all_teams_table = pd.concat(combined_stats, ignore_index=True).sort_values(by="Points", ascending=False)
+all_teams_table.insert(1, "Position", range(1, len(all_teams_table) + 1))
+print(all_teams_table)
