@@ -198,7 +198,8 @@ def build_team_year_stats(team_name, season_key, seasons_dict):
         "YellowCardsAgainst": int(home_df["YCardsAgainst"].sum() + away_df["YCardsAgainst"].sum()),
         "RedCards": int(home_df["RCards"].sum() + away_df["RCards"].sum()),
         "RedCardsAgainst": int(home_df["RCardsAgainst"].sum() + away_df["RCardsAgainst"].sum()),
-        "BigChancesCreated": np.mean(combined_df["BigChancesCreated"])
+        "BigChancesCreated": np.mean(combined_df["BigChancesCreated"]),
+        "points": int(home_df["Win"].sum() * 3 + home_df["Draw"].sum() + away_df["Win"].sum() * 3 + away_df["Draw"].sum())
     }
     return pd.DataFrame([combined])
 
@@ -206,3 +207,51 @@ def build_team_year_stats(team_name, season_key, seasons_dict):
 stats = build_team_year_stats("Barcelona", "24-25", laliga_season_data)
 print(stats)
 
+# function that runs through a single season, and each team for that season
+#
+# def build_season_team(season_key, season_dict):
+#     season_stat = {}
+#     df = season_dict[season_key]
+#     teams = sorted(set(df["HomeTeam"].unique()).union(set(df["AwayTeam"])))
+#     for team in teams:
+#         season_stat[team] = build_team_year_stats(team, season_key, season_dict)
+#     return season_stat
+# all_seasons_stats = {}
+# for season_key in laliga_season_data.keys():
+#     all_seasons_stats.update(build_season_team(season_key, laliga_season_data))
+  
+# print(build_season_team("24-25", laliga_season_data))  
+
+def build_season_team(season_key, season_dict):
+    #"""Builds a dictionary of all teams' season stats for one season."""
+    season_stat = {}
+    df = season_dict[season_key]
+    teams = sorted(set(df["HomeTeam"]).union(set(df["AwayTeam"])))
+
+    for team in teams:
+        try:
+            team_stats = build_team_year_stats(team, season_key, season_dict)
+            season_stat[team] = team_stats
+        except Exception as e:
+            print(f"Error processing {team} in season {season_key}: {e}")
+            continue
+
+    return season_stat
+
+
+# def build_all_seasons(seasons_dict):
+#     #"""Builds the complete La Liga stats database for all seasons."""
+#     all_seasons_stats = {}
+#     for season_key in seasons_dict.keys():
+#         print(f"Building stats for season {season_key}...")
+#         all_seasons_stats[season_key] = build_season_team(season_key, seasons_dict)
+#     return all_seasons_stats
+
+
+# Run the full database build
+laliga_database = build_season_team("24-25",laliga_season_data)
+print()
+# ✅ Access pattern examples
+#print("All seasons:", laliga_database.keys())
+print("Teams in 24-25:", laliga_database)
+#print("Barcelona stats in 24-25:\n", laliga_database["24-25"]["Barcelona"])
