@@ -151,6 +151,9 @@ def build_away_dict_per_season(season_key, seasons_dict):
     teams = sorted(df["AwayTeam"].dropna().unique())
     return {t: build_away_table_for_team(t, season_key, seasons_dict) for t in teams}
 
+away_games_laliga = {sk: build_away_dict_per_season(sk, laliga_season_data) for sk in laliga_season_data.keys()}
+
+
 def build_home_table_for_team(team_name, season_key, season_dict):
     df = season_dict[season_key]
     sub = (df[df["HomeTeam"] == team_name]
@@ -171,7 +174,7 @@ def build_home_dict_per_season(season_key, seasons_dict):
 
 home_games_laliga = {sk: build_home_dict_per_season(sk, laliga_season_data) for sk in laliga_season_data.keys()}
 
-print(home_games_laliga["24-25"]["Barcelona"])
+#print(home_games_laliga["24-25"]["Barcelona"])
 
 def build_team_year_stats(team_name, season_key, seasons_dict):
     home_df = build_home_table_for_team(team_name, season_key, seasons_dict)
@@ -205,22 +208,8 @@ def build_team_year_stats(team_name, season_key, seasons_dict):
 
 # Example usage:
 stats = build_team_year_stats("Barcelona", "24-25", laliga_season_data)
-print(stats)
+#print(stats)
 
-# function that runs through a single season, and each team for that season
-#
-# def build_season_team(season_key, season_dict):
-#     season_stat = {}
-#     df = season_dict[season_key]
-#     teams = sorted(set(df["HomeTeam"].unique()).union(set(df["AwayTeam"])))
-#     for team in teams:
-#         season_stat[team] = build_team_year_stats(team, season_key, season_dict)
-#     return season_stat
-# all_seasons_stats = {}
-# for season_key in laliga_season_data.keys():
-#     all_seasons_stats.update(build_season_team(season_key, laliga_season_data))
-  
-# print(build_season_team("24-25", laliga_season_data))  
 
 def build_season_team(season_key, season_dict):
     #"""Builds a dictionary of all teams' season stats for one season."""
@@ -239,18 +228,10 @@ def build_season_team(season_key, season_dict):
     return season_stat
 
 
-# def build_all_seasons(seasons_dict):
-#     #"""Builds the complete La Liga stats database for all seasons."""
-#     all_seasons_stats = {}
-#     for season_key in seasons_dict.keys():
-#         print(f"Building stats for season {season_key}...")
-#         all_seasons_stats[season_key] = build_season_team(season_key, seasons_dict)
-#     return all_seasons_stats
 
 
 # Run the full database build
 laliga_database = build_season_team("24-25",laliga_season_data)
-print()
 
 combined_stats = []
 for team_name, team_df in laliga_database.items():
@@ -260,4 +241,30 @@ for team_name, team_df in laliga_database.items():
 
 all_teams_table = pd.concat(combined_stats, ignore_index=True).sort_values(by="Points", ascending=False)
 all_teams_table.insert(1, "Position", range(1, len(all_teams_table) + 1))
-print(all_teams_table)
+#print(all_teams_table)
+
+def prepare_training_data(seasons_dict, target_column="Points"):
+
+    all_seasons_stats = {}
+    for season_key in seasons_dict.keys():
+        all_seasons_stats[season_key] = build_season_team(season_key, seasons_dict)
+
+    combined_stats = []
+    for season_key, season_data in all_seasons_stats.items():
+        for team_name, team_df in season_data.items():
+            team_df_copy = team_df.copy()
+            team_df_copy.insert(0, "Team", team_name)
+            team_df_copy.insert(0, "Season", season_key)
+            combined_stats.append(team_df_copy)
+
+    all_teams_table = pd.concat(combined_stats, ignore_index=True)
+
+    exclude_cols = ['Team', 'Season', target_column]
+    X = all_teams_table.drop(columns=exclude_cols)
+    y = all_teams_table[target_column]
+
+    return X, y
+
+X,y = prepare_training_data(laliga_season_data)
+print(X)
+print(y)
