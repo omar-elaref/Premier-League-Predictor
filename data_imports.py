@@ -266,5 +266,5 @@ def prepare_training_data(seasons_dict, target_column="Points"):
     return X, y
 
 X,y = prepare_training_data(laliga_season_data)
-print(X)
-print(y)
+#print(X)
+#print(y)   
