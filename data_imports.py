@@ -169,9 +169,9 @@ def build_home_dict_per_season(season_key, seasons_dict):
     teams = sorted(df["HomeTeam"].dropna().unique())
     return {t: build_home_table_for_team(t, season_key, seasons_dict) for t in teams}
 
-# home_games_laliga = {sk: build_home_dict_per_season(sk, laliga_season_data) for sk in laliga_season_data.keys()}
+home_games_laliga = {sk: build_home_dict_per_season(sk, laliga_season_data) for sk in laliga_season_data.keys()}
 
-# print(home_games_laliga["24-25"]["Barcelona"])
+print(home_games_laliga["24-25"]["Barcelona"])
 
 def build_team_year_stats(team_name, season_key, seasons_dict):
     home_df = build_home_table_for_team(team_name, season_key, seasons_dict)
