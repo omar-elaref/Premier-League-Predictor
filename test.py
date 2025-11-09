@@ -4,6 +4,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -11,60 +12,56 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from data_imports import prepare_training_data, laliga_season_data  # <- your code
 
 # ----------------------
-# 1) Build dataset tables
+# 1) Build dataset table (simple version)
 # ----------------------
-# We need the Season + Team columns to split by season, so lightly modify how we call prepare_training_data.
-# The function returns X,y but we can reconstruct the full table by calling it and redoing feature selection here:
-
 def build_training_table(seasons_dict, target_column="Points"):
     """
-    Returns one DataFrame with Season, Team, all numeric features, and the target column.
-    Uses your build_season_team() logic under the hood via prepare_training_data.
+    Create one DataFrame with Season, Team, numeric feature columns, and the target.
+    - Pulls per-team season tables via your build_season_team(...)
+    - Adds Season/Team columns
+    - Concatenates into a single DataFrame
+    - Returns (full_df, feature_cols)
     """
-    # Rebuild the combined full table with Season/Team retained:
-    all_seasons_stats = {}
-    for season_key in seasons_dict.keys():
-        # This calls your build_season_team under the hood
-        pass
+    from data_imports import build_season_team  # local import to avoid circulars
 
-    # Use the same logic as in prepare_training_data but keep Season + Team + target
-    combined_stats = []
-    from data_imports import build_season_team  # import here to avoid circular
-    for season_key in seasons_dict.keys():
-        season_data = build_season_team(season_key, seasons_dict)
-        for team_name, team_df in season_data.items():
+    rows = []
+    # Iterate seasons in a stable order
+    for season_key in sorted(seasons_dict.keys()):
+        season_dict = build_season_team(season_key, seasons_dict)  # { team_name: team_df }
+        for team_name, team_df in season_dict.items():
             df = team_df.copy()
-            df.insert(0, "Team", team_name)
-            df.insert(0, "Season", season_key)
-            combined_stats.append(df)
+            df.insert(0, "Team", team_name)      # add 'Team' as first col
+            df.insert(0, "Season", season_key)   # add 'Season' before 'Team'
+            rows.append(df)
 
-    full = pd.concat(combined_stats, ignore_index=True)
+    # Stack everything together
+    full = pd.concat(rows, ignore_index=True)
 
-    # Feature matrix = all numeric columns except Season, Team, and target
-    non_features = {"Season", "Team", target_column}
-    feature_cols = [c for c in full.columns if c not in non_features and np.issubdtype(full[c].dtype, np.number)]
-    print(full)
-    print(feature_cols)
+    # Pick numeric columns, then drop Season/Team/target to get the feature list
+    numeric_cols = full.select_dtypes(include=[np.number]).columns.tolist()
+    feature_cols = [c for c in numeric_cols if c != target_column]
+
     return full, feature_cols
 
 full, feature_cols = build_training_table(laliga_season_data, target_column="Points")
 
-# Split by season: train <= 23-24, validate == 24-25
-train_mask = full["Season"] <= "23-24"
-val_mask   = full["Season"] == "24-25"
+# ----------------------
+# 2) Train/Val split by season (simple, explicit)
+# ----------------------
+# Train on all seasons up to 23-24 => i.e., everything EXCEPT 24-25
+train_seasons = [sk for sk in full["Season"].unique() if sk != "24-25"]
+val_seasons   = ["24-25"]
 
-train_df = full.loc[train_mask].reset_index(drop=True)
-val_df   = full.loc[val_mask].reset_index(drop=True)
+train_df = full[full["Season"].isin(train_seasons)].reset_index(drop=True)
+val_df   = full[full["Season"].isin(val_seasons)].reset_index(drop=True)
 
+# Build matrices (float32 for PyTorch)
 X_train = train_df[feature_cols].to_numpy(dtype=np.float32)
 y_train = train_df["Points"].to_numpy(dtype=np.float32).reshape(-1, 1)
 
 X_val   = val_df[feature_cols].to_numpy(dtype=np.float32)
 y_val   = val_df["Points"].to_numpy(dtype=np.float32).reshape(-1, 1)
 
-# ----------------------
-# 2) Scaling
-# ----------------------
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train).astype(np.float32)
 X_val   = scaler.transform(X_val).astype(np.float32)
@@ -72,19 +69,16 @@ X_val   = scaler.transform(X_val).astype(np.float32)
 # ----------------------
 # 3) Torch Dataset/DataLoader
 # ----------------------
-class TabDS(torch.utils.data.Dataset):
-    def __init__(self, X, y):
-        self.X = torch.from_numpy(X)
-        self.y = torch.from_numpy(y)
-    def __len__(self): return self.X.shape[0]
-    def __getitem__(self, idx): return self.X[idx], self.y[idx]
+Xtr = torch.from_numpy(X_train)
+ytr = torch.from_numpy(y_train)
+Xva = torch.from_numpy(X_val)
+yva = torch.from_numpy(y_val)
 
-train_ds = TabDS(X_train, y_train)
-val_ds   = TabDS(X_val, y_val)
+train_ds = TensorDataset(Xtr, ytr)
+val_ds   = TensorDataset(Xva, yva)
 
-train_loader = torch.utils.data.DataLoader(train_ds, batch_size=32, shuffle=True)
-val_loader   = torch.utils.data.DataLoader(val_ds, batch_size=64, shuffle=False)
-
+train_loader = DataLoader(train_ds, batch_size=16, shuffle=True)
+val_loader   = DataLoader(val_ds, batch_size=32, shuffle=False)
 # ----------------------
 # 4) Model (simple MLP)
 # ----------------------
