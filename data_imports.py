@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from importing_files import *
 
 season_2010 = pd.read_csv("laliga/2010-11.csv")
 season_2011 = pd.read_csv("laliga/2011-12.csv")

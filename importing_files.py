@@ -1,0 +1,73 @@
+import pandas as pd
+import numpy as np
+
+
+season_2010_laliga = pd.read_csv("laliga/2010-11.csv")
+season_2011_laliga = pd.read_csv("laliga/2011-12.csv")
+season_2012_laliga = pd.read_csv("laliga/2012-13.csv")
+season_2013_laliga = pd.read_csv("laliga/2013-14.csv")
+season_2014_laliga = pd.read_csv("laliga/2014-15.csv")
+season_2015_laliga = pd.read_csv("laliga/2015-16.csv")
+season_2016_laliga = pd.read_csv("laliga/2016-17.csv")
+season_2017_laliga = pd.read_csv("laliga/2017-18.csv")
+season_2018_laliga = pd.read_csv("laliga/2018-19.csv")
+season_2019_laliga = pd.read_csv("laliga/2019-20.csv")
+season_2020_laliga = pd.read_csv("laliga/2020-21.csv")
+season_2021_laliga = pd.read_csv("laliga/2021-22.csv")
+season_2022_laliga = pd.read_csv("laliga/2022-23.csv")
+season_2023_laliga = pd.read_csv("laliga/2023-24.csv")
+season_2024_laliga = pd.read_csv("laliga/2024-25.csv")
+
+
+
+season_2010_prem = pd.read_csv("Premier League/2010-11.csv")
+season_2011_prem = pd.read_csv("Premier League/2011-12.csv")
+season_2012_prem = pd.read_csv("Premier League/2012-13.csv")
+season_2013_prem = pd.read_csv("Premier League/2013-14.csv")
+season_2014_prem = pd.read_csv("Premier League/2014-15.csv")
+season_2015_prem = pd.read_csv("Premier League/2015-16.csv")
+season_2016_prem = pd.read_csv("Premier League/2016-17.csv")
+season_2017_prem = pd.read_csv("Premier League/2017-18.csv")
+season_2018_prem = pd.read_csv("Premier League/2018-19.csv")
+season_2019_prem = pd.read_csv("Premier League/2019-20.csv")
+season_2020_prem = pd.read_csv("Premier League/2020-21.csv")
+season_2021_prem = pd.read_csv("Premier League/2021-22.csv")
+season_2022_prem = pd.read_csv("Premier League/2022-23.csv")
+season_2023_prem = pd.read_csv("Premier League/2023-24.csv")
+season_2024_prem = pd.read_csv("Premier League/2024-25.csv")
+
+
+season_2010_seriea = pd.read_csv("seriea/2010-11.csv")
+season_2011_seriea = pd.read_csv("seriea/2011-12.csv")
+season_2012_seriea = pd.read_csv("seriea/2012-13.csv")
+season_2013_seriea = pd.read_csv("seriea/2013-14.csv")
+season_2014_seriea = pd.read_csv("seriea/2014-15.csv")
+season_2015_seriea = pd.read_csv("seriea/2015-16.csv")
+season_2016_seriea = pd.read_csv("seriea/2016-17.csv")
+season_2017_seriea = pd.read_csv("seriea/2017-18.csv")
+season_2018_seriea = pd.read_csv("seriea/2018-19.csv")
+season_2019_seriea = pd.read_csv("seriea/2019-20.csv")
+season_2020_seriea = pd.read_csv("seriea/2020-21.csv")
+season_2021_seriea = pd.read_csv("seriea/2021-22.csv")
+season_2022_seriea = pd.read_csv("seriea/2022-23.csv")
+season_2023_seriea = pd.read_csv("seriea/2023-24.csv")
+season_2024_seriea = pd.read_csv("seriea/2024-25.csv")
+
+
+
+
+season_2010_bundesliga = pd.read_csv("bundesliga/2010-11.csv")
+season_2011_bundesliga = pd.read_csv("bundesliga/2011-12.csv")
+season_2012_bundesliga = pd.read_csv("bundesliga/2012-13.csv")
+season_2013_bundesliga = pd.read_csv("bundesliga/2013-14.csv")
+season_2014_bundesliga = pd.read_csv("bundesliga/2014-15.csv")
+season_2015_bundesliga = pd.read_csv("bundesliga/2015-16.csv")
+season_2016_bundesliga = pd.read_csv("bundesliga/2016-17.csv")
+season_2017_bundesliga = pd.read_csv("bundesliga/2017-18.csv")
+season_2018_bundesliga = pd.read_csv("bundesliga/2018-19.csv")
+season_2019_bundesliga = pd.read_csv("bundesliga/2019-20.csv")
+season_2020_bundesliga = pd.read_csv("bundesliga/2020-21.csv")
+season_2021_bundesliga = pd.read_csv("bundesliga/2021-22.csv")
+season_2022_bundesliga = pd.read_csv("bundesliga/2022-23.csv")
+season_2023_bundesliga = pd.read_csv("bundesliga/2023-24.csv")
+season_2024_bundesliga = pd.read_csv("bundesliga/2024-25.csv")
