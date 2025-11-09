@@ -66,22 +66,16 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train).astype(np.float32)
 X_val   = scaler.transform(X_val).astype(np.float32)
 
-# ----------------------
-# 3) Torch Dataset/DataLoader
-# ----------------------
-Xtr = torch.from_numpy(X_train)
-ytr = torch.from_numpy(y_train)
-Xva = torch.from_numpy(X_val)
-yva = torch.from_numpy(y_val)
 
-train_ds = TensorDataset(Xtr, ytr)
-val_ds   = TensorDataset(Xva, yva)
+def calculate_full_loss(model, criterion, X, y):
+    """Compute loss over the entire dataset (no grads)."""
+    model.eval()
+    with torch.no_grad():
+        preds = model(X)
+        loss = criterion(preds, y)
+    model.train()
+    return float(loss.item())
 
-train_loader = DataLoader(train_ds, batch_size=16, shuffle=True)
-val_loader   = DataLoader(val_ds, batch_size=32, shuffle=False)
-# ----------------------
-# 4) Model (simple MLP)
-# ----------------------
 class FootballModel(nn.Module):
     def __init__(self, input_size, h1=64, h2=32, out_dim=1):
         super().__init__()
@@ -95,66 +89,98 @@ class FootballModel(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = FootballModel(input_size=len(feature_cols), h1=64, h2=32, out_dim=1).to(device)
 
+def train_with_minibatch(model, criterion, optimizer,
+                         X_train, y_train, X_val, y_val,
+                         num_iterations, batch_size, check_every,
+                         shuffle_each_epoch=True):
+    """
+    Minibatch trainer with simple modulo batch selection.
+    - No DataLoader; works on full tensors directly.
+    - Optionally reshuffles at the start of each 'epoch' (i.e., when batches wrap).
+    - Logs full-dataset train/val loss every `check_every` iterations.
+    """
+    model.train()
+
+    train_losses, val_losses, iterations = [], [], []
+
+    # Initial logged losses at iteration 0
+    train_losses.append(calculate_full_loss(model, criterion, X_train, y_train))
+    val_losses.append(calculate_full_loss(model, criterion, X_val, y_val))
+    iterations.append(0)
+
+    n_train = X_train.shape[0]
+    batch_size = int(min(max(1, batch_size), n_train))
+    num_batches = (n_train + batch_size - 1) // batch_size  # ceil division
+
+    # Index order (shuffled per epoch if requested)
+    order = torch.arange(n_train)
+
+    for it in range(1, num_iterations + 1):
+        # If we wrapped around (new epoch), optionally reshuffle
+        if shuffle_each_epoch and ((it - 1) % num_batches == 0):
+            order = order[torch.randperm(n_train)]
+
+        batch_id = (it - 1) % num_batches
+        start = batch_id * batch_size
+        end = min(start + batch_size, n_train)
+
+        idx = order[start:end]
+        xb, yb = X_train[idx], y_train[idx]
+
+        optimizer.zero_grad(set_to_none=True)
+        y_hat = model(xb)
+        loss = criterion(y_hat, yb)
+        loss.backward()
+        optimizer.step()
+
+        if it % check_every == 0 or it == num_iterations:
+            tr_loss = calculate_full_loss(model, criterion, X_train, y_train)
+            va_loss = calculate_full_loss(model, criterion, X_val,   y_val)
+            train_losses.append(tr_loss)
+            val_losses.append(va_loss)
+            iterations.append(it)
+
+    return train_losses, val_losses, iterations, model
+
+model = FootballModel(input_size=len(feature_cols), h1=64, h2=32, out_dim=1)
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
-epochs = 200
 
-# ----------------------
-# 5) Train/eval loops
-# ----------------------
-def run_epoch(loader, train=True):
-    model.train(mode=train)
-    total_loss = 0.0
-    yhats = []
-    ys = []
-    for xb, yb in loader:
-        xb = xb.to(device)
-        yb = yb.to(device)
-        if train:
-            optimizer.zero_grad()
-        pred = model(xb)
-        loss = criterion(pred, yb)
-        if train:
-            loss.backward()
-            optimizer.step()
-        total_loss += loss.item() * xb.size(0)
-        yhats.append(pred.detach().cpu().numpy())
-        ys.append(yb.detach().cpu().numpy())
-    N = len(loader.dataset)
-    avg_loss = total_loss / N if N else 0.0
-    yhats = np.vstack(yhats) if yhats else np.zeros((0,1))
-    ys = np.vstack(ys) if ys else np.zeros((0,1))
-    return avg_loss, yhats, ys
+X_train_t = torch.tensor(X_train, dtype=torch.float32)
+y_train_t = torch.tensor(y_train, dtype=torch.float32)
+X_val_t   = torch.tensor(X_val,   dtype=torch.float32)
+y_val_t   = torch.tensor(y_val,   dtype=torch.float32)
 
-best_state = None
-best_val = float("inf")
+NUM_ITERS   = 5000
+BATCH_SIZE  = 32
+CHECK_EVERY = 100
 
-for ep in range(1, epochs+1):
-    tr_loss, _, _ = run_epoch(train_loader, train=True)
-    va_loss, _, _ = run_epoch(val_loader, train=False)
-    if va_loss < best_val:
-        best_val = va_loss
-        best_state = {k:v.cpu().clone() for k,v in model.state_dict().items()}
-    if ep % 20 == 0 or ep == 1:
-        print(f"Epoch {ep:03d} | train MSE {tr_loss:.3f} | val MSE {va_loss:.3f}")
-
-# load best
-if best_state is not None:
-    model.load_state_dict(best_state)
+train_losses, val_losses, iters, model = train_with_minibatch(
+    model, criterion, optimizer,
+    X_train_t, y_train_t, X_val_t, y_val_t,
+    num_iterations=NUM_ITERS,
+    batch_size=BATCH_SIZE,
+    check_every=CHECK_EVERY,
+    shuffle_each_epoch=True,   # set False to make it fully deterministic
+)
 
 # ----------------------
 # 6) Final validation metrics + per-team table
 # ----------------------
-_, yhat_val, ytrue_val = run_epoch(val_loader, train=False)
+def predict_full(model, X):
+    """Return model predictions for the entire tensor X as a 1-D NumPy array."""
+    model.eval()
+    with torch.no_grad():
+        yhat = model(X)
+    model.train()
+    return yhat.detach().cpu().numpy().ravel()
 
-# Flatten to 1-D for sklearn
-y_true = ytrue_val.ravel()
-y_pred = yhat_val.ravel()
+# 1) Get predictions and flatten targets
+y_pred = predict_full(model, X_val_t)               # shape -> (N,)
+y_true = y_val_t.detach().cpu().numpy().ravel()     # shape -> (N,)
 
-# Compute metrics (no 'squared' kwarg)
+# 2) Metrics (version-proof RMSE)
 mse  = mean_squared_error(y_true, y_pred)
 rmse = np.sqrt(mse)
 mae  = mean_absolute_error(y_true, y_pred)
@@ -162,11 +188,12 @@ r2   = r2_score(y_true, y_pred)
 
 print(f"\n24-25 regression metrics -> RMSE: {rmse:.2f} | MAE: {mae:.2f} | R^2: {r2:.3f}")
 
-val_out = val_df[["Season","Team"]].copy()
+# 3) Predicted table for 24-25 (by points prediction)
+val_out = val_df[["Season", "Team"]].copy()
 val_out["Points_true"] = y_true
 val_out["Points_pred"] = y_pred
 val_out["Error"] = val_out["Points_pred"] - val_out["Points_true"]
 val_out = val_out.sort_values("Points_pred", ascending=False).reset_index(drop=True)
 
 print("\nPredicted 24-25 table (by points prediction):")
-print(val_out[["Team","Points_pred","Points_true","Error"]].head(10))
+print(val_out[["Team","Points_pred","Points_true","Error"]])
