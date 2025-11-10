@@ -1,125 +1,152 @@
-# learning.py
+# rnn_season_predictor.py
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader
-
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-from data_imports import prepare_training_data, prem_season_data  # <- your code
-from FootballModel import *
+from data_imports import prem_season_data, LABEL_MAP, REV_LABEL, FEATS, build_match_table
+from SeasonRNN import SeasonRNN
 
-# ----------------------
-# 1) Build dataset table (simple version)
-# ----------------------
-def build_training_table(seasons_dict, target_column="Points"):
-    """
-    Create one DataFrame with Season, Team, numeric feature columns, and the target.
-    - Pulls per-team season tables via your build_season_team(...)
-    - Adds Season/Team columns
-    - Concatenates into a single DataFrame
-    - Returns (full_df, feature_cols)
-    """
-    from data_imports import build_season_team  # local import to avoid circulars
+matches = build_match_table(prem_season_data)
 
-    rows = []
-    # Iterate seasons in a stable order
-    for season_key in sorted(seasons_dict.keys()):
-        season_dict = build_season_team(season_key, seasons_dict)  # { team_name: team_df }
-        for team_name, team_df in season_dict.items():
-            df = team_df.copy()
-            df.insert(0, "Team", team_name)      # add 'Team' as first col
-            df.insert(0, "Season", season_key)   # add 'Season' before 'Team'
-            rows.append(df)
-
-    # Stack everything together
-    full = pd.concat(rows, ignore_index=True)
-
-    # Pick numeric columns, then drop Season/Team/target to get the feature list
-    numeric_cols = full.select_dtypes(include=[np.number]).columns.tolist()
-    feature_cols = [c for c in numeric_cols if c != target_column]
-
-    return full, feature_cols
-
-full, feature_cols = build_training_table(prem_season_data, target_column="Points")
-
-# ----------------------
-# 2) Train/Val split by season (simple, explicit)
-# ----------------------
-# Train on all seasons up to 23-24 => i.e., everything EXCEPT 24-25
-train_seasons = [sk for sk in full["Season"].unique() if sk != "24-25"]
+train_seasons = [s for s in matches["Season"].unique() if s != "24-25"]
 val_seasons   = ["24-25"]
 
-train_df = full[full["Season"].isin(train_seasons)].reset_index(drop=True)
-val_df   = full[full["Season"].isin(val_seasons)].reset_index(drop=True)
+train_df = matches[matches["Season"].isin(train_seasons)].copy()
+val_df   = matches[matches["Season"].isin(val_seasons)].copy()
 
-# Build matrices (float32 for PyTorch)
-X_train = train_df[feature_cols].to_numpy(dtype=np.float32)
-y_train = train_df["Points"].to_numpy(dtype=np.float32).reshape(-1, 1)
-
-X_val   = val_df[feature_cols].to_numpy(dtype=np.float32)
-y_val   = val_df["Points"].to_numpy(dtype=np.float32).reshape(-1, 1)
+teams = sorted(set(train_df["HomeTeam"]).union(set(train_df["AwayTeam"])).union(
+               set(val_df["HomeTeam"])).union(set(val_df["AwayTeam"])))
+team2id = {t:i for i,t in enumerate(teams)}
+num_teams = len(teams)
 
 scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train).astype(np.float32)
-X_val   = scaler.transform(X_val).astype(np.float32)
+scaler.fit(train_df[FEATS].to_numpy(dtype=np.float32))
+
+def feats_tensor(df):
+    X = scaler.transform(df[FEATS].to_numpy(dtype=np.float32))
+    return torch.tensor(X, dtype=torch.float32)
 
 
 
-model = FootballModel(input_size=len(feature_cols), h1=64, h2=32, out_dim=1)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
+def train_season_rnn(model, train_df, num_teams, hidden_dim=32, lr=1e-3, epochs=5):
+    
+    opt = optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
 
-X_train_t = torch.tensor(X_train, dtype=torch.float32)
-y_train_t = torch.tensor(y_train, dtype=torch.float32)
-X_val_t   = torch.tensor(X_val,   dtype=torch.float32)
-y_val_t   = torch.tensor(y_val,   dtype=torch.float32)
-
-NUM_ITERS   = 5000
-BATCH_SIZE  = 32
-CHECK_EVERY = 100
-
-train_losses, val_losses, iters, model = train_with_minibatch(
-    model, criterion, optimizer,
-    X_train_t, y_train_t, X_val_t, y_val_t,
-    num_iterations=NUM_ITERS,
-    batch_size=BATCH_SIZE,
-    check_every=CHECK_EVERY,
-    shuffle_each_epoch=True,   # set False to make it fully deterministic
-)
-
-# ----------------------
-# 6) Final validation metrics + per-team table
-# ----------------------
-def predict_full(model, X):
-    """Return model predictions for the entire tensor X as a 1-D NumPy array."""
-    model.eval()
-    with torch.no_grad():
-        yhat = model(X)
     model.train()
-    return yhat.detach().cpu().numpy().ravel()
+    for ep in range(1, epochs+1):
+        total_loss = 0.0
+        n = 0
+        
+        H = torch.zeros((num_teams, hidden_dim), dtype=torch.float32)
 
-# 1) Get predictions and flatten targets
-y_pred = predict_full(model, X_val_t)               # shape -> (N,)
-y_true = y_val_t.detach().cpu().numpy().ravel()     # shape -> (N,)
+        for season in sorted(train_df["Season"].unique()):
+            season_df = train_df[train_df["Season"] == season]
 
-# 2) Metrics (version-proof RMSE)
-mse  = mean_squared_error(y_true, y_pred)
-rmse = np.sqrt(mse)
-mae  = mean_absolute_error(y_true, y_pred)
-r2   = r2_score(y_true, y_pred)
+            for _, r in season_df.iterrows():
+                hi = team2id[r["HomeTeam"]]
+                ai = team2id[r["AwayTeam"]]
 
-print(f"\n24-25 regression metrics -> RMSE: {rmse:.2f} | MAE: {mae:.2f} | R^2: {r2:.3f}")
+                h_home = H[hi]
+                h_away = H[ai]
+                x_feat = feats_tensor(pd.DataFrame([r]))[0]  # (feat_dim,)
 
-# 3) Predicted table for 24-25 (by points prediction)
-val_out = val_df[["Season", "Team"]].copy()
-val_out["Points_true"] = y_true
-val_out["Points_pred"] = y_pred
-val_out["Error"] = val_out["Points_pred"] - val_out["Points_true"]
-val_out = val_out.sort_values("Points_pred", ascending=False).reset_index(drop=True)
+                logits = model.forward_predict(h_home, h_away, x_feat)
+                y = torch.tensor([r["y"]], dtype=torch.long)
+                loss = criterion(logits.unsqueeze(0), y)
 
-print("\nPredicted 24-25 table (by points prediction):")
-print(val_out[["Team","Points_pred","Points_true","Error"]])
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+
+                total_loss += float(loss.item()); n += 1
+
+                with torch.no_grad():
+                    new_h_home, new_h_away = model.update_states(h_home, h_away, x_feat)
+                    H[hi] = new_h_home
+                    H[ai] = new_h_away
+
+        avg = total_loss / max(1, n)
+        if ep == 1 or ep % 1 == 0:
+            print(f"Epoch {ep:02d} | train CE {avg:.4f}")
+    return H
+
+def validate_season_rnn(model, val_df, num_teams, hidden_dim=32, init_H=None):
+    
+    model.eval()
+    season = "24-25"
+    season_df = val_df[val_df["Season"] == season]
+
+    if init_H is not None:
+        H = init_H.clone() 
+    else:
+        H = torch.zeros((num_teams, hidden_dim), dtype=torch.float32)
+
+    preds, trues = [], []
+    rows = []  
+    
+    with torch.no_grad():
+        for _, r in season_df.iterrows():
+            hi = team2id[r["HomeTeam"]]
+            ai = team2id[r["AwayTeam"]]
+            h_home = H[hi]
+            h_away = H[ai]
+            x_feat = feats_tensor(pd.DataFrame([r]))[0]
+
+            logits = model.forward_predict(h_home, h_away, x_feat)
+            pred = int(torch.argmax(logits).item())
+            true = int(r["y"])
+
+            preds.append(pred); trues.append(true)
+
+            rows.append({
+                "Date": r["Date"], "HomeTeam": r["HomeTeam"], "AwayTeam": r["AwayTeam"],
+                "pred": REV_LABEL[pred], "true": REV_LABEL[true]
+            })
+
+            new_h_home, new_h_away = model.update_states(h_home, h_away, x_feat)
+            H[hi] = new_h_home
+            H[ai] = new_h_away
+
+    acc = accuracy_score(trues, preds) if preds else 0.0
+    print(f"\nValidation 24-25 match accuracy: {acc:.3f}")
+    print("Confusion (rows=true, cols=pred) [H,D,A]:")
+    print(confusion_matrix(trues, preds, labels=[0,1,2]))
+    print(classification_report(trues, preds, target_names=["Home","Draw","Away"], digits=3))
+
+    per_match = pd.DataFrame(rows).sort_values("Date").reset_index(drop=True)
+    agg = []
+    for _, m in per_match.iterrows():
+        h, a, pr = m["HomeTeam"], m["AwayTeam"], m["pred"]
+        if pr == "H":
+            agg.append((h,"W")); agg.append((a,"L"))
+        elif pr == "A":
+            agg.append((a,"W")); agg.append((h,"L"))
+        else:
+            agg.append((h,"D")); agg.append((a,"D"))
+    per_team = pd.DataFrame(agg, columns=["Team","Res"])
+    summary = (per_team.pivot_table(index="Team", columns="Res", aggfunc="size", fill_value=0)
+                        .reindex(columns=["W","D","L"], fill_value=0)
+                        .reset_index()
+                        .sort_values(["W","D","L"], ascending=[False,False,True])
+                        .reset_index(drop=True))
+    print("\nPredicted 24-25 summary (by W/D/L):")
+    print(summary)
+
+    return per_match, summary
+
+
+hidden_dim = 32
+head_dim   = 32
+
+model = SeasonRNN(feat_dim=len(FEATS), hidden_dim=hidden_dim, head_dim=head_dim, num_classes=3)
+
+print("Training on seasons <= 23-24...")
+H_final = train_season_rnn(model, train_df, num_teams=num_teams, hidden_dim=hidden_dim, lr=1e-3, epochs=5)
+
+print("\nValidating on 24-25...")
+per_match_preds, per_team_summary = validate_season_rnn(model, val_df, num_teams=num_teams, hidden_dim=hidden_dim, init_H=H_final)

@@ -49,8 +49,8 @@ def create_away_row(row, match_num):
         elif res == "D": win, draw, lose = 0, 1, 0
         else: win, draw, lose = 0, 0, 1
         
-        goals = row.get("FTHG", np.nan)
-        sot = row.get("HST", 0)
+        goals = row.get("FTAG", np.nan)
+        sot = row.get("AST", 0)
         out = {
             "match": match_num,
             "ground": "A",
@@ -220,3 +220,35 @@ def prepare_training_data(seasons_dict, target_column="Points"):
 X,y = prepare_training_data(laliga_season_data)
 #print(X)
 #print(y)   
+
+
+LABEL_MAP = {"H": 0, "D": 1, "A": 2}
+REV_LABEL = {v: k for k, v in LABEL_MAP.items()}
+FEATS = ["B365H", "B365D", "B365A"]  
+
+def build_match_table(seasons_dict):
+    rows = []
+    for sk in sorted(seasons_dict.keys()):
+        df = seasons_dict[sk].copy()
+        # keep only what we need
+        need = ["Date", "HomeTeam", "AwayTeam", "FTR"] + FEATS
+        have = [c for c in need if c in df.columns]
+        df = df.loc[:, have].copy()
+
+        # numeric features
+        for c in FEATS:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+        # clean rows
+        df = df.dropna(subset=FEATS + ["FTR", "HomeTeam", "AwayTeam", "Date"])
+        df = df[df["FTR"].isin(LABEL_MAP)]
+
+        df["y"] = df["FTR"].map(LABEL_MAP)
+        df["Season"] = sk
+        rows.append(df)
+
+    all_matches = pd.concat(rows, ignore_index=True)
+    # sort inside each season by date to respect chronology
+    all_matches["Date"] = pd.to_datetime(all_matches["Date"])
+    all_matches = all_matches.sort_values(["Season", "Date"]).reset_index(drop=True)
+    return all_matches
