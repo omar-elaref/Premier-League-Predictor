@@ -91,7 +91,14 @@ Describe any features you used for your model, or how your data was input to you
 
 \section{Implementation}
 
-Describe your model and implementation here. Refer to item 4. This may take around a page.
+Our current model is a recurrent neural network (RNN) designed to predict football match outcomes (Home, Draw, or Away) using pre-match Bet365 odds as its core input features. Each team in the dataset maintains an evolving hidden state that represents its form, strength, and momentum as the season progresses. These hidden states are updated after every match, capturing long-term dependencies such as winning streaks or poor form. The architecture includes two role-specific GRUCells, one for home teams and one for away teams, along with a lightweight feature encoder and a prediction head. The encoder processes match-level input features, while the prediction head combines both teams’ hidden states with the encoded features to output probabilities over the three possible results. This design allows the model to simulate how a team’s past performance influences future games and provides a realistic temporal modeling approach to football outcomes.
+
+The model is trained chronologically so that it only learns from information available before each match, preventing data leakage. We use Cross-Entropy Loss to measure prediction accuracy and optimize it with the Adam optimizer at a learning rate of 1e-3. Team states are preserved between matches and even across seasons, ensuring that training carries historical context into future fixtures. During validation, these same hidden states are continued rather than reset, allowing the model to make realistic predictions for the 2024–25 season based on prior knowledge from earlier years. This mirrors how real-world forecasts work, leveraging form, head-to-head momentum, and team trajectories. Each prediction step updates team states again, creating a rolling, causally consistent evaluation loop.
+
+Our model currently reaches around 54\% accuracy, showing that it has learned meaningful relationships between odds, team performance, and match outcomes. However, the model currently struggles with class imbalance, rarely predicting draws, an expected challenge in football modeling since draws are less frequent and less predictable. This imbalance triggers sklearn’s UndefinedMetricWarning, which we silence for clarity. Despite this limitation, the model’s performance and behavior confirm that it is learning temporal structure rather than memorizing outcomes, as it maintains competitive accuracy even when tested on an unseen season.
+
+Moving forward, several improvements are planned. We will incorporate class weighting or focal loss to better capture draw outcomes and address imbalance. We also plan to extend the feature set beyond betting odds to include pre-match statistics such as recent form, home advantage metrics, and player availability. Additionally, truncated backpropagation through time (BPTT) can be introduced to strengthen the RNN’s ability to retain useful information across longer sequences. With these refinements, we expect the model to produce more balanced, realistic predictions and to generalize more effectively across future seasons.
+
 
 \section{Results and Evaluation}
 
@@ -177,7 +184,7 @@ This an example cross-reference to Equation~\ref{eq:example}. You can also write
 
 \section*{Team Contributions}
 
-Write in this section a few sentences describing the contributions of each team member. What did each member work on? Refer to item 7.
+The project was an equal collaboration between us, with each member contributing approximately one-third of the overall work. All three team members worked together closely through regular calls, discussing ideas, debugging issues, and refining the model implementation in real time. Omar El-Aref primarily focused on structuring the RNN workflow, ensuring chronological data handling, and integrating the training and validation loops. Omar Hassan contributed to model tuning, performance evaluation, and implementing feature scaling and state management across matches and seasons. Khalid worked extensively on the data preprocessing and feature construction, helping ensure the match tables were clean, and consistent. Overall, the development process was highly collaborative.
 
 % Bibliography entries for the entire Anthology, followed by custom entries
 %\bibliography{custom,anthology-overleaf-1,anthology-overleaf-2}
