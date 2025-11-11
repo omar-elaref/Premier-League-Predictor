@@ -1,0 +1,46 @@
+\begin{thebibliography}{6}
+\providecommand{\natexlab}[1]{#1}
+
+\bibitem[{Constantinou et~al.(2012)Constantinou, Fenton, and
+  Neil}]{constantinou2012pifootball}
+Anthony~C. Constantinou, Norman~E. Fenton, and Martin Neil. 2012.
+\newblock \href {https://doi.org/10.1016/j.knosys.2012.07.008} {pi-football: A
+  bayesian network model for forecasting association football match outcomes}.
+\newblock \emph{Knowledge-Based Systems}, 36:322--339.
+
+\bibitem[{Dixon and Coles(1997)}]{dixon1997modelling}
+Mark~J. Dixon and Stuart~G. Coles. 1997.
+\newblock \href
+  {https://www.ajbuckeconbikesail.net/wkpapers/Airports/MVPoisson/soccer_betting.pdf}
+  {Modelling association football scores and inefficiencies in the football
+  betting market}.
+\newblock \emph{Applied Statistics}, 46(2):265--280.
+
+\bibitem[{{Football-Data.co.uk}(2025)}]{footballdata}
+{Football-Data.co.uk}. 2025.
+\newblock \href {https://www.football-data.co.uk/} {Football-data.co.uk:
+  Historical football results and betting odds data}.
+\newblock Accessed: November 9, 2025.
+
+\bibitem[{Hubáček et~al.(2019)Hubáček, Šourek, and
+  Železný}]{hubacek2019learning}
+Ondřej Hubáček, Gustav Šourek, and Filip Železný. 2019.
+\newblock \href {https://doi.org/10.1007/s10994-018-5704-6} {Learning to
+  predict soccer results from relational data with gradient boosted trees}.
+\newblock \emph{Machine Learning}, 108(1):29--47.
+
+\bibitem[{Nyquist and Pettersson(2017)}]{nyquist2017deep}
+Rasmus Nyquist and Daniel Pettersson. 2017.
+\newblock \href
+  {https://publications.lib.chalmers.se/records/fulltext/250411/250411.pdf}
+  {Football match prediction using deep learning}.
+\newblock Master's thesis, Chalmers University of Technology, Gothenburg,
+  Sweden.
+
+\bibitem[{Tadjrishi(2025)}]{armantee2025}
+Arman Tadjrishi. 2025.
+\newblock Predicting premier league match results based on historic data.
+\newblock \url{https://armantee.github.io/predicting/}.
+\newblock Accessed: 2025-11-11.
+
+\end{thebibliography}

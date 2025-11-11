@@ -5,6 +5,7 @@
 \usepackage[]{acl}
 \usepackage{times}
 \usepackage{latexsym}
+\usepackage{makecell}
 
 % For proper rendering and hyphenation of words containing Latin characters (including in bib files)
 \usepackage[T1]{fontenc}
@@ -24,11 +25,11 @@
 %
 % and set <dim> to something 5cm or larger.
 
-\title{Group X Progress Report:\\My Group's Project Name}
+\title{Group 24 Progress Report:\\My Group's Project Name}
 
 
-\author{First Author, Second Author, Third Author \\
-  \texttt{\{macid1,macid2,macid3\}@mcmaster.ca} }
+\author{Omar Abdelhamid, Khalid Farag, Omar El-Aref \\
+  \texttt{\{abdelo8,faragk1,elarefo\}@mcmaster.ca} }
 
 %\author{
 %  \textbf{First Author\textsuperscript{1}},
@@ -88,7 +89,7 @@ Other studies have focused on improving model interpretability and feature repre
 
 \section{Dataset}
 
-Our dataset consists of historical English Premier League match data covering seasons 2010–11 through 2024–25, obtained from the public repository \textit{Football-Data.co.uk}. Each season’s CSV file contains match-level statistics such as team names, dates, full-time and half-time results, goal counts, shot counts, disciplinary records, and betting odds. The same loading functions can be reused for La Liga, Serie A, and Bundesliga, which were used only for cross-testing and pipeline validation.
+Our dataset consists of historical English Premier League match data covering seasons 2010–11 through 2024–25, obtained from the public repository \citep{footballdata}. Each season’s CSV file contains match-level statistics such as team names, dates, full-time and half-time results, goal counts, shot counts, disciplinary records, and betting odds. The same loading functions can be reused for La Liga, Serie A, and Bundesliga, which were used only for cross-testing and pipeline validation.
 
 The files are imported and standardized in \texttt{importing\_files.py}, which keeps a consistent subset of numeric features across all seasons:
 
@@ -98,7 +99,7 @@ The files are imported and standardized in \texttt{importing\_files.py}, which k
 \hline
 \textbf{Category} & \textbf{Example Columns} \\
 \hline
-Match Info & Date, HomeTeam, AwayTeam, Season, Div \\
+Match Info & \makecell[l]{Date, HomeTeam, \\AwayTeam, Season, Div} \\
 Full-time Outcome & FTHG, FTAG, FTR \\
 Half-time Stats & HTHG, HTAG, HTR \\
 Offensive Metrics & HS, AS, HST, AST, HC, AC \\
@@ -259,56 +260,17 @@ In response, we analyzed which features can be realistically known before a matc
 Moving forward, our plan is to extend our current recurrent neural network (RNN) to explicitly model the temporal progression of each team throughout the season. In this design, each layer of the network corresponds to the sequential flow of matches: the first layer processes the betting odds of the opening game, and each subsequent layer incorporates both the betting odds for the next game and the previous game’s result to predict the next outcome. This approach allows the network to learn how form, confidence, and performance evolve across a season, providing a more dynamic and realistic representation of team behavior.
 
 By combining the TA’s feedback on feature realism with this temporal RNN framework, our model will shift from static predictions toward sequence-aware forecasting. This advancement will improve predictive power while maintaining interpretability and real-world applicability.
-\section{Template Notes}
 
-You can remove this section or comment it out, as it only contains instructions for how to use this template. You may use subsections in your document as you find appropriate.
-
-\subsection{Tables and figures}
-
-See Table~\ref{citation-guide} for an example of a table and its caption.
-See Figure~\ref{fig:experiments} for an example of a figure and its caption.
+\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning, footballdata}
 
 
-\begin{figure}[t]
-  \includegraphics[width=\columnwidth]{example-image-golden}
-  \caption{A figure with a caption that runs for more than one line.
-    Example image is usually available through the \texttt{mwe} package
-    without even mentioning it in the preamble.}
-  \label{fig:experiments}
-\end{figure}
-
-\begin{figure*}[t]
-  \includegraphics[width=0.48\linewidth]{example-image-a} \hfill
-  \includegraphics[width=0.48\linewidth]{example-image-b}
-  \caption {A minimal working example to demonstrate how to place
-    two images side-by-side.}
-\end{figure*}
-
-
-\subsection{References}
-
-\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning}
-
-
-\subsection{Equations}
-
-An example equation is shown below:
-\begin{equation}
-  \label{eq:example}
-  A = \pi r^2
-\end{equation}
-
-Labels for equation numbers, sections, subsections, figures and tables
-are all defined with the \verb|\label{label}| command and cross references
-to them are made with the \verb|\ref{label}| command.
-This an example cross-reference to Equation~\ref{eq:example}. You can also write equations inline, like this: $A=\pi r^2$.
 
 
 % \section*{Limitations}
 
 \section*{Team Contributions}
 
-The project was an equal collaboration between us, with each member contributing approximately one-third of the overall work. All three team members worked together closely through regular calls, discussing ideas, debugging issues, and refining the model implementation in real time. Omar El-Aref primarily focused on structuring the RNN workflow, ensuring chronological data handling, and integrating the training and validation loops. Omar Hassan contributed to model tuning, performance evaluation, and implementing feature scaling and state management across matches and seasons. Khalid worked extensively on the data preprocessing and feature construction, helping ensure the match tables were clean, and consistent. Overall, the development process was highly collaborative.
+The project was an equal collaboration between us, with each member contributing approximately one-third of the overall work. All three team members worked together closely through regular calls, discussing ideas, debugging issues, and refining the model implementation in real time. Omar El-Aref primarily focused on structuring the RNN workflow, ensuring chronological data handling, and integrating the training and validation loops. Omar Abdelhamid contributed to model tuning, performance evaluation, and implementing feature scaling and state management across matches and seasons. Khalid worked extensively on the data preprocessing and feature construction, helping ensure the match tables were clean, and consistent. Overall, the development process was highly collaborative.
 
 % Bibliography entries for the entire Anthology, followed by custom entries
 %\bibliography{custom,anthology-overleaf-1,anthology-overleaf-2}
