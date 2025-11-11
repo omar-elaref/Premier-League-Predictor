@@ -75,11 +75,16 @@
 
 \section{Introduction}
 
-Here, write a brief introduction to the problem you are solving. This can be adapted from your problem description and motivation from the original proposal. This should be around 0.25-0.5 pages.
+Predicting the outcomes of football competitions and generating the full season league standings represents a challenging task that intersects statistical analysis and machine learning. The English Premier League (EPL), with its twenty teams and intense, unpredictable competition, providing a compelling context for this kind of task. In this project, we build a machine learning model that takes historical match data from the EPL including betting odds as the features and predicts the full season league standings. In addition to the predicted standings, we also predict the match outcomes for each match in the 2024-25 season, so the wins, draws, and losses for each team. This project is motivated by the growing interest in using data-driven approaches to understand and predict football standings and match outcomes. This project is valuable to many different stakeholders, including fans seeking deeper insights into their favorite teams/leagues, bettors looking to make informed decisions, media organizations seeking to provide insightful analysis, and clubs looking to gain a competitive edge in the league. In this report, we will describe the related work we encountered for our approach, the dataset we used, the features we used for our model, our implementation, our results and evaluation, and our feedback and plans for the remainder of the project.
+
 
 \section{Related Work}
 
-Here, talk about the related work you encountered for your approach. Cite at least 5 references. Refer to item 2. No one has done exactly your task? Write about the most similar thing you can find. This should be around 0.25-0.5 pages.
+There have been a number of prior studies that have attempted to predict the football match outcomes and the full season league standings. One of the most notable studies is the work of Arman Tadjrishi, who proposed multiple models to predict the football match outcomes and the full season league standings. The models that he proposed are decision trees, random forests, and neural networks, where his best model was able to predict the full season league standings with an accuracy of 55\% using a feedforward neural network. \citep{armantee2025} 
+
+Another significant contribution to this problem were the work of Nyquist and Pettersson, who investigated the use of deep learning concepts for football match prediction. Their study employed recurrent neural networks (RNNs) to capture sequential dependencies in match outcomes, and they concluded that deep learning models can outperform traditional machine learning methods when sufficient historical data is available \citep{nyquist2017deep}. Similarly, Constantinou \textit{et al.} developed \textit{pi-football}, a Bayesian network model that combines both objective and subjective factors, such as team strength, fatigue, and form, to improve prediction accuracy. \citep{constantinou2012pifootball}. 
+
+Other studies have focused on improving model interpretability and feature representation. Hubáček \textit{et al.} applied gradient boosted trees to relational match data, achieving high predictive performance and demonstrating that feature-rich, tree-based methods can rival deep learning in sports analytics \citep{hubacek2019learning}. Furthermore, the foundational work of Dixon and Coles introduced a Poisson regression framework for football score prediction, which remains influential as a baseline for modern probabilistic forecasting models \citep{dixon1997modelling}. 
 
 \section{Dataset}
 
@@ -95,7 +100,93 @@ Describe your model and implementation here. Refer to item 4. This may take arou
 
 \section{Results and Evaluation}
 
-How are you evaluating your model? What results do you have so far? What are your baselines? Refer to item 5. This may take around 0.5 pages.
+\subsection{Evaluation Strategy}
+
+For our evaluation strategy, we use train/validation split strategy to evalulate our model. Sepecifcally, we use all the EPL seasons from 2010-11 through 2023-24 as the training set, and reserve the 2024-25 season as the validation set. This approach simulates a realistic prediction scenario where we use historical data to predict future outcomes, avoiding data leakage that could occur with random splits. We do not use cross-validation, as the temporal nature of the data and the need to maintain season-level integrity make it more appropriate to use a single held-out season for validation.
+
+
+\subsection{Evaluation Metrics}
+
+We evaluate our model using several classification metrics appropriate for multi-class prediction:
+\begin{itemize}
+    \item \textbf{Accuracy}: The overall proportion of correctly predicted match outcomes
+    \item \textbf{Precision}: The proportion of predicted positive cases that are actually positive, computed per class
+    \item \textbf{Recall}: The proportion of actual positive cases that are correctly identified, computed per class
+    \item \textbf{F1-score}: The harmonic mean of precision and recall, providing a balanced metric
+\end{itemize}
+
+These metrics are computed for each of the three outcome classes (Home win, Draw, Away win), as well as macro-averaged and weighted-averaged across all classes.
+
+\subsection{Results}
+
+\autoref{tab:classification_metrics} presents the classification performance metrics for our model on the 2024-25 validation season. The model achieves an overall accuracy of 55.3\% on 380 matches. The precision, recall, and F1-scores reveal a significant class imbalance issue: the model performs well on Home wins (F1-score of 0.660) and moderately on Away wins (F1-score of 0.581), but completely fails to predict Draw outcomes (F1-score of 0.000). This suggests that the model is biased toward predicting wins rather than draws, which is a common challenge in football prediction tasks.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\hline
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-score} & \textbf{Support} \\
+\hline
+Home & 0.531 & 0.871 & 0.660 & 155 \\
+Draw & 0.000 & 0.000 & 0.000 & 93 \\
+Away & 0.595 & 0.568 & 0.581 & 132 \\
+\hline
+\textbf{Accuracy} & \multicolumn{4}{c}{0.553 (380)} \\
+\textbf{Macro Avg} & 0.376 & 0.480 & 0.414 & 380 \\
+\textbf{Weighted Avg} & 0.424 & 0.553 & 0.471 & 380 \\
+\hline
+\end{tabular}
+\caption{Classification metrics for match outcome prediction on the 2024-25 validation season.}
+\label{tab:classification_metrics}
+\end{table}
+
+\autoref{fig:confusion_matrix} shows the confusion matrix for our predictions, which visualizes the model's performance across all three outcome classes. The matrix confirms the model's strong bias toward predicting Home wins, with 135 out of 155 actual Home wins correctly predicted, but only 0 out of 93 Draw outcomes correctly identified.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\columnwidth]{../../ConfusionMatrix.png}
+  \caption{Confusion matrix for match outcome predictions on the 2024-25 Premier League season. Rows represent true labels, columns represent predicted labels.}
+  \label{fig:confusion_matrix}
+\end{figure}
+
+\autoref{tab:predicted_standings} presents the predicted league standings for the 2024-25 season, aggregated from individual match predictions. Notably, the predicted standings show no draws for any team, which is a direct consequence of the model's inability to predict draw outcomes. The top three teams (Arsenal, Liverpool, and Manchester City) are all predicted to finish with identical records of 35 wins and 3 losses, which reflects the model's tendency to favor strong teams in its predictions.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Team} & \textbf{W} & \textbf{D} & \textbf{L} \\
+\hline
+Arsenal & 35 & 0 & 3 \\
+Liverpool & 35 & 0 & 3 \\
+Man City & 35 & 0 & 3 \\
+Chelsea & 31 & 0 & 7 \\
+Newcastle & 28 & 0 & 10 \\
+Aston Villa & 23 & 0 & 15 \\
+Brighton & 22 & 0 & 16 \\
+Bournemouth & 20 & 0 & 18 \\
+Man United & 20 & 0 & 18 \\
+Fulham & 19 & 0 & 19 \\
+Nott'm Forest & 19 & 0 & 19 \\
+Brentford & 18 & 0 & 20 \\
+Tottenham & 18 & 0 & 20 \\
+Crystal Palace & 16 & 0 & 22 \\
+West Ham & 11 & 0 & 27 \\
+Wolves & 9 & 0 & 29 \\
+Everton & 8 & 0 & 30 \\
+Leicester & 5 & 0 & 33 \\
+Ipswich & 4 & 0 & 34 \\
+Southampton & 4 & 0 & 34 \\
+\hline
+\end{tabular}
+\caption{Predicted 2024-25 Premier League standings aggregated from match-level predictions. W = Wins, D = Draws, L = Losses.}
+\label{tab:predicted_standings}
+\end{table}
+
+\subsection{Baseline Comparison}
+
+As a baseline, we can compare our model's accuracy of 55.3\% to the work of Tadjrishi \citep{armantee2025}, who achieved 55\% accuracy using a feedforward neural network. Our model performs similarly, though the class imbalance issue with draws represents a significant limitation that requires further investigation and model refinement.
 
 \section{Feedback and Plans}
 
@@ -127,37 +218,10 @@ See Figure~\ref{fig:experiments} for an example of a figure and its caption.
 \end{figure*}
 
 
-\subsection{Citations}
-
-\begin{table*}
-  \centering
-  \begin{tabular}{lll}
-    \hline
-    \textbf{Output}           & \textbf{natbib command} & \textbf{ACL only command} \\
-    \hline
-    \citep{Gusfield:97}       & \verb|\citep|           &                           \\
-    \citealp{Gusfield:97}     & \verb|\citealp|         &                           \\
-    \citet{Gusfield:97}       & \verb|\citet|           &                           \\
-    \citeyearpar{Gusfield:97} & \verb|\citeyearpar|     &                           \\
-    \citeposs{Gusfield:97}    &                         & \verb|\citeposs|          \\
-    \hline
-  \end{tabular}
-  \caption{\label{citation-guide}
-    Citation commands supported by the style file.
-  }
-\end{table*}
-
-Table~\ref{citation-guide} shows the syntax supported by the style files.
-We encourage you to use the natbib styles.
-You can use the command \verb|\citet| (cite in text) to get ``author (year)'' citations, like this citation to a paper by \citet{Gusfield:97}.
-You can use the command \verb|\citep| (cite in parentheses) to get ``(author, year)'' citations \citep{Gusfield:97}.
-You can use the command \verb|\citealp| (alternative cite without parentheses) to get ``author, year'' citations, which is useful for using citations within parentheses (e.g. \citealp{Gusfield:97}).
-
 \subsection{References}
 
-\nocite{Ando2005,andrew2007scalable,rasooli-tetrault-2015}
+\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning}
 
-Many websites where you can find academic papers also allow you to export a bib file for citation or bib formatted entry. Copy this into the \texttt{custom.bib} and you will be able to cite the paper in the \LaTeX{}. You can remove the example entries.
 
 \subsection{Equations}
 
