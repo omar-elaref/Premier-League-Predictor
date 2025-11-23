@@ -48,35 +48,35 @@ def create_away_row(row, match_num):
         if res == "A": win, draw, lose = 1, 0, 0
         elif res == "D": win, draw, lose = 0, 1, 0
         else: win, draw, lose = 0, 0, 1
-        
+
         goals = row.get("FTAG", np.nan)
         sot = row.get("AST", 0)
         out = {
             "match": match_num,
             "ground": "A",
             "Date": row.get("Date", np.nan),
-            "TeamAgainst": row.get("AwayTeam", np.nan),
-            "Goals": goals,
-            "GoalsConceded": row.get("FTAG", np.nan),
-            "HTGoals": row.get("HTHG", np.nan),
+            "TeamAgainst": row.get("HomeTeam", np.nan),
+            "Goals": row.get("FTAG", np.nan),
+            "GoalsConceded": row.get("FTHG", np.nan),
+            "HTGoals": row.get("HTAG", np.nan),
             "HTResult": row.get("HTR", np.nan),
-            "Shots": row.get("HS", np.nan),
-            "ShotsAgainst": row.get("AS", np.nan),
+            "Shots": row.get("AS", np.nan),
+            "ShotsAgainst": row.get("HS", np.nan),
             "ShotsOnTarget": sot,
-            "ShotsAgainstOnTarget": row.get("AST", np.nan),
-            "Corners": row.get("HC", np.nan),
-            "CornersAgainst": row.get("AC", np.nan),
-            "FoulsCommitted": row.get("HF", np.nan),
-            "FoulsAgainst": row.get("AF", np.nan),
-            "YCards": row.get("HY", np.nan),
-            "YCardsAgainst": row.get("AY", np.nan),
-            "RCards": row.get("HR", np.nan),
-            "RCardsAgainst": row.get("AR", np.nan),
+            "ShotsAgainstOnTarget": row.get("HST", np.nan),
+            "Corners": row.get("AC", np.nan),
+            "CornersAgainst": row.get("HC", np.nan),
+            "FoulsCommitted": row.get("AF", np.nan),
+            "FoulsAgainst": row.get("HF", np.nan),
+            "YCards": row.get("AY", np.nan),
+            "YCardsAgainst": row.get("HY", np.nan),
+            "RCards": row.get("AR", np.nan),
+            "RCardsAgainst": row.get("HR", np.nan),
             "Win": win, "Draw": draw, "Lose": lose,
-            "BigChancesCreated": (0 if pd.isna(goals) else goals) + (0 if pd.isna(sot) else sot)
+            "BigChancesCreated": (0 if pd.isna(goals) else goals) + (0 if pd.isna(sot) else sot),
         }
-        
         return pd.DataFrame([out], index=[match_num])
+
     
 def build_away_table_for_team(team_name, season_key, season_dict):
     df = season_dict[season_key]
