@@ -85,21 +85,7 @@ def build_match_history_tensors(
     k_h2h: int = 5,
     odds_cols=("B365H", "B365D", "B365A"),
 ):
-    """
-    Main dataset builder for your architecture.
-
-    Returns a dict of torch tensors:
-        team1_ids:   (N,)
-        team2_ids:   (N,)
-        ground_flags:(N,)  # 0 = team1 is home (always in this setup)
-        meta_numeric:(N, len(odds_cols))
-        h2h_seq:     (N, k_h2h, hist_dim)
-        team1_seq:   (N, k_form, hist_dim)
-        team2_seq:   (N, k_form, hist_dim)
-        y_goals:     (N, 2)  # [FTHG, FTAG]
-        team_to_id:  dict mapping team name -> int
-        matches_df:  info DataFrame for debugging
-    """
+    
     all_matches = _build_all_matches_prem(seasons_dict)
 
     # keep only rows with known final score AND reset index
@@ -210,12 +196,7 @@ def build_match_history_tensors(
 
 
 class MatchHistoryEncoder(nn.Module):
-    """
-    Generic GRU encoder for a sequence of past matches.
-
-    Input:  x of shape (batch, seq_len, feat_dim)
-    Output: h of shape (batch, hidden_dim)
-    """
+    
     def __init__(self, feat_dim, hidden_dim, num_layers=1, bidirectional=False, dropout=0.0):
         super().__init__()
         self.gru = nn.GRU(
@@ -237,15 +218,7 @@ class MatchHistoryEncoder(nn.Module):
 
 
 class FootballScorePredictor(nn.Module):
-    """
-    Your architecture:
-
-      metadata ----\
-      Enc1 (H2H) ---+--> concat --> FF --> [goals_team1, goals_team2]
-      Enc2 (team1) -+
-      Enc3 (team2) -+
-
-    """
+    
     def __init__(
         self,
         num_teams: int,
@@ -377,23 +350,37 @@ class FootballSequenceDataset(Dataset):
 # dataset already built somewhere above:
 # dataset = FootballSequenceDataset(prem_season_data, k_form=5, k_h2h=5)
 
-def make_time_split_loaders(dataset, val_ratio=0.2, batch_size=64):
+def make_time_split_loaders(dataset, batch_size=64):
     """
-    Splits the dataset chronologically: first part = train, last part = val.
+    Train on all seasons except the last one.
+    Validate on the last season only.
     """
-    N = len(dataset)
-    split_idx = int(N * (1 - val_ratio))
+    # Extract all seasons present in the dataset
+    seasons = dataset.matches_df["Season"].unique()
+    seasons_sorted = sorted(seasons)      # ensures correct season order
+    last_season = seasons_sorted[-1]      # choose the final season
 
-    train_idx = np.arange(0, split_idx)
-    val_idx   = np.arange(split_idx, N)
+    # Build boolean mask for validation rows
+    season_col = dataset.matches_df["Season"].values
+    val_mask = (season_col == last_season)
 
+    # Indices for train and val
+    val_idx = np.where(val_mask)[0]
+    train_idx = np.where(~val_mask)[0]
+
+    print(f"Validation Season: {last_season}")
+    print(f"Train matches: {len(train_idx)}, Validation matches: {len(val_idx)}")
+
+    # Build subsets
     train_ds = Subset(dataset, train_idx)
     val_ds   = Subset(dataset, val_idx)
 
+    # Dataloaders
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader
+
 
 
 def to_device(batch, device):
@@ -504,10 +491,17 @@ def evaluate(model, data_loader, criterion, device):
     }
 
 
+
+
+
+
+
+
 from importing_files import prem_season_data
 # === build dataset and loaders ===
 dataset = FootballSequenceDataset(prem_season_data, k_form=5, k_h2h=5)
-train_loader, val_loader = make_time_split_loaders(dataset, val_ratio=0.2, batch_size=64)
+train_loader, val_loader = make_time_split_loaders(dataset, batch_size=64)
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -545,3 +539,129 @@ for epoch in range(1, num_epochs + 1):
         f"val_exact={val_metrics['exact_score_acc']*100:.2f}% | "
         f"val_wdl={val_metrics['wdl_acc']*100:.2f}%"
     )
+
+
+
+
+
+
+
+@torch.no_grad()
+def print_validation_table_predicted(dataset, val_loader, model, device):
+    """
+    Build and print a league table for the matches in the validation split,
+    using the MODEL'S PREDICTED results (not the true scores).
+    """
+    model.eval()
+
+    subset = val_loader.dataset  # this should be a Subset over the original dataset
+    if isinstance(subset, Subset):
+        val_indices = list(subset.indices)
+    else:
+        val_indices = list(range(len(dataset)))
+
+    table = {}  # team -> stats dict
+
+    def ensure_team(team):
+        if team not in table:
+            table[team] = {
+                "P": 0,
+                "W": 0,
+                "D": 0,
+                "L": 0,
+                "GF": 0,
+                "GA": 0,
+            }
+
+    offset = 0
+    for batch in val_loader:
+        # indices for this batch in the original dataset
+        batch_size = batch["y"].size(0)
+        batch_indices = val_indices[offset: offset + batch_size]
+        offset += batch_size
+
+        # move batch to device
+        for k in list(batch.keys()):
+            if torch.is_tensor(batch[k]):
+                batch[k] = batch[k].to(device)
+
+        # predictions
+        preds = model(
+            batch["team1_ids"],
+            batch["team2_ids"],
+            batch["ground_flags"],
+            batch["meta_numeric"],
+            batch["h2h_seq"],
+            batch["team1_seq"],
+            batch["team2_seq"],
+        )  # (B, 2)
+
+        # round to nearest integer goals, clamp at 0
+        pred_goals = torch.round(preds).clamp(min=0).long().cpu().numpy()
+
+        for idx_in_batch, data_idx in enumerate(batch_indices):
+            match = dataset.matches_df.iloc[data_idx]
+            home = match["HomeTeam"]
+            away = match["AwayTeam"]
+
+            hg = int(pred_goals[idx_in_batch, 0])
+            ag = int(pred_goals[idx_in_batch, 1])
+
+            ensure_team(home)
+            ensure_team(away)
+
+            # update games played
+            table[home]["P"] += 1
+            table[away]["P"] += 1
+
+            # goals for/against
+            table[home]["GF"] += hg
+            table[home]["GA"] += ag
+            table[away]["GF"] += ag
+            table[away]["GA"] += hg
+
+            # result from predictions
+            if hg > ag:
+                table[home]["W"] += 1
+                table[away]["L"] += 1
+            elif hg < ag:
+                table[home]["L"] += 1
+                table[away]["W"] += 1
+            else:
+                table[home]["D"] += 1
+                table[away]["D"] += 1
+
+    # convert to list and add GD / Points
+    rows = []
+    for team, s in table.items():
+        GD = s["GF"] - s["GA"]
+        Pts = 3 * s["W"] + 1 * s["D"]
+        rows.append({
+            "Team": team,
+            "P": s["P"],
+            "W": s["W"],
+            "D": s["D"],
+            "L": s["L"],
+            "GF": s["GF"],
+            "GA": s["GA"],
+            "GD": GD,
+            "Pts": Pts,
+        })
+
+    # sort by Points desc, GD desc, GF desc
+    rows.sort(key=lambda r: (r["Pts"], r["GD"], r["GF"]), reverse=True)
+
+    # print nicely
+    print("\n=== Validation League Table (Predicted Results) ===")
+    header = f"{'Pos':>3}  {'Team':<20} {'P':>2} {'W':>2} {'D':>2} {'L':>2} {'GF':>3} {'GA':>3} {'GD':>3} {'Pts':>3}"
+    print(header)
+    print("-" * len(header))
+    for i, r in enumerate(rows, start=1):
+        print(
+            f"{i:>3}  {r['Team']:<20} "
+            f"{r['P']:>2} {r['W']:>2} {r['D']:>2} {r['L']:>2} "
+            f"{r['GF']:>3} {r['GA']:>3} {r['GD']:>3} {r['Pts']:>3}"
+        )
+
+
+print_validation_table_predicted(dataset, val_loader, model, device)
