@@ -102,8 +102,8 @@ def build_match_history_tensors(
     """
     all_matches = _build_all_matches_prem(seasons_dict)
 
-    # keep only rows with known final score
-    all_matches = all_matches.dropna(subset=["FTHG", "FTAG", "FTR"])
+    # keep only rows with known final score AND reset index
+    all_matches = all_matches.dropna(subset=["FTHG", "FTAG", "FTR"]).reset_index(drop=True)
 
     # make sure odds exist numerically (fill NaN with 0.0 so you still keep the match)
     for c in odds_cols:
@@ -332,7 +332,7 @@ class FootballScorePredictor(nn.Module):
         return goals  # predicted [goals_team1, goals_team2]
 
 
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader, Subset
 
 class FootballSequenceDataset(Dataset):
     def __init__(self, seasons_dict, k_form=5, k_h2h=5, odds_cols=("B365H", "B365D", "B365A")):
