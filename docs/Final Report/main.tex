@@ -5,7 +5,6 @@
 \usepackage[]{acl}
 \usepackage{times}
 \usepackage{latexsym}
-\usepackage{makecell}
 
 % For proper rendering and hyphenation of words containing Latin characters (including in bib files)
 \usepackage[T1]{fontenc}
@@ -25,7 +24,7 @@
 %
 % and set <dim> to something 5cm or larger.
 
-\title{Group 24 Progress Report:\\My Group's Project Name}
+\title{Group 24 Final Report:\\Premier League Predictor}
 
 
 \author{Omar Abdelhamid, Khalid Farag, Omar El-Aref \\
@@ -76,201 +75,109 @@
 
 \section{Introduction}
 
-Predicting the outcomes of football competitions and generating the full season league standings represents a challenging task that intersects statistical analysis and machine learning. The English Premier League (EPL), with its twenty teams and intense, unpredictable competition, providing a compelling context for this kind of task. In this project, we build a machine learning model that takes historical match data from the EPL including betting odds as the features and predicts the full season league standings. In addition to the predicted standings, we also predict the match outcomes for each match in the 2024-25 season, so the wins, draws, and losses for each team. This project is motivated by the growing interest in using data-driven approaches to understand and predict football standings and match outcomes. This project is valuable to many different stakeholders, including fans seeking deeper insights into their favorite teams/leagues, bettors looking to make informed decisions, media organizations seeking to provide insightful analysis, and clubs looking to gain a competitive edge in the league. In this report, we will describe the related work we encountered for our approach, the dataset we used, the features we used for our model, our implementation, our results and evaluation, and our feedback and plans for the remainder of the project.
-
+Here, write a brief introduction to the problem you are solving. This can be adapted from your problem description and motivation from the original proposal. This should be around 0.25-0.5 pages.
 
 \section{Related Work}
 
-There have been a number of prior studies that have attempted to predict the football match outcomes and the full season league standings. One of the most notable studies is the work of Arman Tadjrishi, who proposed multiple models to predict the football match outcomes and the full season league standings. The models that he proposed are decision trees, random forests, and neural networks, where his best model was able to predict the full season league standings with an accuracy of 55\% using a feedforward neural network. \citep{armantee2025} 
-
-Another significant contribution to this problem were the work of Nyquist and Pettersson, who investigated the use of deep learning concepts for football match prediction. Their study employed recurrent neural networks (RNNs) to capture sequential dependencies in match outcomes, and they concluded that deep learning models can outperform traditional machine learning methods when sufficient historical data is available \citep{nyquist2017deep}. Similarly, Constantinou \textit{et al.} developed \textit{pi-football}, a Bayesian network model that combines both objective and subjective factors, such as team strength, fatigue, and form, to improve prediction accuracy. \citep{constantinou2012pifootball}. 
-
-Other studies have focused on improving model interpretability and feature representation. Hubáček \textit{et al.} applied gradient boosted trees to relational match data, achieving high predictive performance and demonstrating that feature-rich, tree-based methods can rival deep learning in sports analytics \citep{hubacek2019learning}. Furthermore, the foundational work of Dixon and Coles introduced a Poisson regression framework for football score prediction, which remains influential as a baseline for modern probabilistic forecasting models \citep{dixon1997modelling}. 
+Here, talk about the related work you encountered for your approach. Cite at least 5 references. Refer to item 2. No one has done exactly your task? Write about the most similar thing you can find. This should be around 0.25-0.5 pages.
 
 \section{Dataset}
 
-Our dataset consists of historical English Premier League match data covering seasons 2010–11 through 2024–25, obtained from the public repository \citep{footballdata}. Each season’s CSV file contains match-level statistics such as team names, dates, full-time and half-time results, goal counts, shot counts, disciplinary records, and betting odds. The same loading functions can be reused for La Liga, Serie A, and Bundesliga, which were used only for cross-testing and pipeline validation.
-
-The files are imported and standardized in \texttt{importing\_files.py}, which keeps a consistent subset of numeric features across all seasons:
-
-\begin{table}[h]
-\centering
-\begin{tabular}{ll}
-\hline
-\textbf{Category} & \textbf{Example Columns} \\
-\hline
-Match Info & \makecell[l]{Date, HomeTeam, \\AwayTeam, Season, Div} \\
-Full-time Outcome & FTHG, FTAG, FTR \\
-Half-time Stats & HTHG, HTAG, HTR \\
-Offensive Metrics & HS, AS, HST, AST, HC, AC \\
-Discipline & HF, AF, HY, AY, HR, AR \\
-Betting Odds & B365H, B365D, B365A \\
-\hline
-\end{tabular}
-\caption{Example columns included in the Premier League dataset.}
-\end{table}
-
-To make the data team-centric, the script \texttt{data\_imports.py} converts every match into home and away records using helper functions (\texttt{create\_home\_row}, \texttt{create\_away\_row}) and aggregates them with \texttt{build\_team\_year\_stats}. For each team in each season, we compute:
-\begin{itemize}
-    \item Wins, Draws, and Losses
-    \item Goals For / Against / Difference
-    \item Average Shots, Shots on Target, and Corners
-    \item Average Fouls, Yellow and Red Cards
-    \item Derived features such as \textit{Big Chances Created} and total \textit{Points}
-\end{itemize}
-
-These per-team summaries are concatenated by \texttt{build\_season\_team} into a unified training table of shape (n teams $\times$ n seasons). The target variable is total Points earned in a season, and all remaining numerical columns serve as features.
-
-Preprocessing includes:
-\begin{itemize}
-    \item Removing incomplete or inconsistent rows
-    \item Converting categorical results (FTR) from \{H, D, A\} to numeric labels
-    \item Normalizing features with \texttt{StandardScaler}
-    \item Chronological split: all seasons $\leq$ 2023–24 for training, 2024–25 for validation
-\end{itemize}
-
-This design allows the model to learn season-to-season performance patterns and generate realistic predictions for the current Premier League season while minimizing temporal leakage.
-
-
+You should write about your dataset here, following the guidelines regarding item 1. This section may be 0.5-1 pages. Depending on your specific dataset, you may want to include subsections for the preprocessing, annotation, etc.
 
 \section{Features}
 
-Our model uses a combination of match-level and season-level statistical features derived from the Premier League dataset. Each match record includes pre-match betting odds (\texttt{B365H}, \texttt{B365D}, \texttt{B365A}) and performance indicators such as goals, shots, corners, fouls, and disciplinary actions (yellow and red cards). These attributes provide both contextual and statistical information about each game.
-
-Initially, we experimented with a feedforward neural network (\texttt{FootballModel}) that operated on season-aggregated data. In this setup, each team-season pair was represented as a fixed-length numeric vector containing features like average goals, shots, cards, corners, and derived statistics such as goal difference and total points. All numeric inputs were standardized using a \texttt{StandardScaler} to normalize their ranges before training.
-
-To improve realism and capture team momentum, we later transitioned to a recurrent neural network (\texttt{SeasonRNN}). Instead of treating each season as an independent instance, the RNN processes matches sequentially in temporal order. Each input vector to the model consists of:
-\begin{itemize}
-    \item Encoded quantitative match features (\texttt{B365H}, \texttt{B365D}, \texttt{B365A})
-    \item A binary role signal indicating whether the team is playing at home (+1) or away (–1)
-    \item The current hidden states of both the home and away teams
-\end{itemize}
-
-No explicit feature selection was performed; rather, all relevant numeric features were retained. Feature engineering was minimal, limited to the computation of derived metrics such as goal difference and “big chances created.” The neural network itself is responsible for learning internal feature importance and higher-level representations through backpropagation. The hidden states of the RNN function as learned embeddings that evolve over time, capturing form, fatigue, and consistency across the season.
-
-Overall, all features and learned representations are integrated into a single neural network framework, allowing the model to jointly learn statistical patterns and temporal dynamics for improved match and season prediction performance.
+Describe any features you used for your model, or how your data was input to your model. Are you doing feature engineering or feature selection? Are you learning embeddings? Is it all part of one neural network? Refer to item 2. This may range from 0.25 pages to 0.5 pages.
 
 \section{Implementation}
 
-Our current model is a recurrent neural network (RNN) designed to predict football match outcomes (Home, Draw, or Away) using pre-match Bet365 odds as its core input features. Each team in the dataset maintains an evolving hidden state that represents its form, strength, and momentum as the season progresses. These hidden states are updated after every match, capturing long-term dependencies such as winning streaks or poor form. The architecture includes two role-specific GRUCells, one for home teams and one for away teams, along with a lightweight feature encoder and a prediction head. The encoder processes match-level input features, while the prediction head combines both teams’ hidden states with the encoded features to output probabilities over the three possible results. This design allows the model to simulate how a team’s past performance influences future games and provides a realistic temporal modeling approach to football outcomes.
-
-The model is trained chronologically so that it only learns from information available before each match, preventing data leakage. We use Cross-Entropy Loss to measure prediction accuracy and optimize it with the Adam optimizer at a learning rate of 1e-3. Team states are preserved between matches and even across seasons, ensuring that training carries historical context into future fixtures. During validation, these same hidden states are continued rather than reset, allowing the model to make realistic predictions for the 2024–25 season based on prior knowledge from earlier years. This mirrors how real-world forecasts work, leveraging form, head-to-head momentum, and team trajectories. Each prediction step updates team states again, creating a rolling, causally consistent evaluation loop.
-
-Our model currently reaches around 54\% accuracy, showing that it has learned meaningful relationships between odds, team performance, and match outcomes. However, the model currently struggles with class imbalance, rarely predicting draws, an expected challenge in football modeling since draws are less frequent and less predictable. This imbalance triggers sklearn’s UndefinedMetricWarning, which we silence for clarity. Despite this limitation, the model’s performance and behavior confirm that it is learning temporal structure rather than memorizing outcomes, as it maintains competitive accuracy even when tested on an unseen season.
-
-Moving forward, several improvements are planned. We will incorporate class weighting or focal loss to better capture draw outcomes and address imbalance. We also plan to extend the feature set beyond betting odds to include pre-match statistics such as recent form, home advantage metrics, and player availability. Additionally, truncated backpropagation through time (BPTT) can be introduced to strengthen the RNN’s ability to retain useful information across longer sequences. With these refinements, we expect the model to produce more balanced, realistic predictions and to generalize more effectively across future seasons.
-
+Describe your model and implementation here. Refer to item 4. This may take around a page.
 
 \section{Results and Evaluation}
 
-\subsection{Evaluation Strategy}
-
-For our evaluation strategy, we use train/validation split strategy to evalulate our model. Sepecifcally, we use all the EPL seasons from 2010-11 through 2023-24 as the training set, and reserve the 2024-25 season as the validation set. This approach simulates a realistic prediction scenario where we use historical data to predict future outcomes, avoiding data leakage that could occur with random splits. We do not use cross-validation, as the temporal nature of the data and the need to maintain season-level integrity make it more appropriate to use a single held-out season for validation.
-
-
-\subsection{Evaluation Metrics}
-
-We evaluate our model using several classification metrics appropriate for multi-class prediction:
-\begin{itemize}
-    \item \textbf{Accuracy}: The overall proportion of correctly predicted match outcomes
-    \item \textbf{Precision}: The proportion of predicted positive cases that are actually positive, computed per class
-    \item \textbf{Recall}: The proportion of actual positive cases that are correctly identified, computed per class
-    \item \textbf{F1-score}: The harmonic mean of precision and recall, providing a balanced metric
-\end{itemize}
-
-These metrics are computed for each of the three outcome classes (Home win, Draw, Away win), as well as macro-averaged and weighted-averaged across all classes.
-
-\subsection{Results}
-
-\autoref{tab:classification_metrics} presents the classification performance metrics for our model on the 2024-25 validation season. The model achieves an overall accuracy of 55.3\% on 380 matches. The precision, recall, and F1-scores reveal a significant class imbalance issue: the model performs well on Home wins (F1-score of 0.660) and moderately on Away wins (F1-score of 0.581), but completely fails to predict Draw outcomes (F1-score of 0.000). This suggests that the model is biased toward predicting wins rather than draws, which is a common challenge in football prediction tasks.
-
-\begin{table}[h]
-\centering
-\begin{tabular}{lcccc}
-\hline
-\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-score} & \textbf{Support} \\
-\hline
-Home & 0.531 & 0.871 & 0.660 & 155 \\
-Draw & 0.000 & 0.000 & 0.000 & 93 \\
-Away & 0.595 & 0.568 & 0.581 & 132 \\
-\hline
-\textbf{Accuracy} & \multicolumn{4}{c}{0.553 (380)} \\
-\textbf{Macro Avg} & 0.376 & 0.480 & 0.414 & 380 \\
-\textbf{Weighted Avg} & 0.424 & 0.553 & 0.471 & 380 \\
-\hline
-\end{tabular}
-\caption{Classification metrics for match outcome prediction on the 2024-25 validation season.}
-\label{tab:classification_metrics}
-\end{table}
-
-\autoref{fig:confusion_matrix} shows the confusion matrix for our predictions, which visualizes the model's performance across all three outcome classes. The matrix confirms the model's strong bias toward predicting Home wins, with 135 out of 155 actual Home wins correctly predicted, but only 0 out of 93 Draw outcomes correctly identified.
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.9\columnwidth]{../../ConfusionMatrix.png}
-  \caption{Confusion matrix for match outcome predictions on the 2024-25 Premier League season. Rows represent true labels, columns represent predicted labels.}
-  \label{fig:confusion_matrix}
-\end{figure}
-
-\autoref{tab:predicted_standings} presents the predicted league standings for the 2024-25 season, aggregated from individual match predictions. Notably, the predicted standings show no draws for any team, which is a direct consequence of the model's inability to predict draw outcomes. The top three teams (Arsenal, Liverpool, and Manchester City) are all predicted to finish with identical records of 35 wins and 3 losses, which reflects the model's tendency to favor strong teams in its predictions.
-
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{lccc}
-\hline
-\textbf{Team} & \textbf{W} & \textbf{D} & \textbf{L} \\
-\hline
-Arsenal & 35 & 0 & 3 \\
-Liverpool & 35 & 0 & 3 \\
-Man City & 35 & 0 & 3 \\
-Chelsea & 31 & 0 & 7 \\
-Newcastle & 28 & 0 & 10 \\
-Aston Villa & 23 & 0 & 15 \\
-Brighton & 22 & 0 & 16 \\
-Bournemouth & 20 & 0 & 18 \\
-Man United & 20 & 0 & 18 \\
-Fulham & 19 & 0 & 19 \\
-Nott'm Forest & 19 & 0 & 19 \\
-Brentford & 18 & 0 & 20 \\
-Tottenham & 18 & 0 & 20 \\
-Crystal Palace & 16 & 0 & 22 \\
-West Ham & 11 & 0 & 27 \\
-Wolves & 9 & 0 & 29 \\
-Everton & 8 & 0 & 30 \\
-Leicester & 5 & 0 & 33 \\
-Ipswich & 4 & 0 & 34 \\
-Southampton & 4 & 0 & 34 \\
-\hline
-\end{tabular}
-\caption{Predicted 2024-25 Premier League standings aggregated from match-level predictions. W = Wins, D = Draws, L = Losses.}
-\label{tab:predicted_standings}
-\end{table}
-
-\subsection{Baseline Comparison}
-
-As a baseline, we can compare our model's accuracy of 55.3\% to the work of Tadjrishi \citep{armantee2025}, who achieved 55\% accuracy using a feedforward neural network. Our model performs similarly, though the class imbalance issue with draws represents a significant limitation that requires further investigation and model refinement.
+How are you evaluating your model? What results do you have so far? What are your baselines? Refer to item 5. This may take around 0.5 pages.
 
 \section{Feedback and Plans}
 
-During our progress review, our TA provided feedback emphasizing the importance of performing feature selection and considering the availability of data at prediction time. Specifically, the feedback noted that not all columns from the CSV files should be used for training, since many of them (such as goals, shots, and cards) are only known after a match has concluded. Using these variables would cause data leakage when attempting to predict future outcomes.
+Write about your plans for the remainder of the project. This should include a discussion of the feedback you received from your TA, and how you plan to improve your approach. Reflect on your implementation and areas for improvement. Refer to item 6. This may be around 0.5 pages.
 
-In response, we analyzed which features can be realistically known before a match. We concluded that the only truly predictive and pre-match features are the betting odds (\texttt{B365H}, \texttt{B365D}, and \texttt{B365A}), as they reflect the expectations of bookmakers and the public before kickoff. Our next step is to refine the dataset so that only forward-available information is used to train the model. This ensures that our predictions remain realistic and generalizable.
+\section{Template Notes}
 
-Moving forward, our plan is to extend our current recurrent neural network (RNN) to explicitly model the temporal progression of each team throughout the season. In this design, each layer of the network corresponds to the sequential flow of matches: the first layer processes the betting odds of the opening game, and each subsequent layer incorporates both the betting odds for the next game and the previous game’s result to predict the next outcome. This approach allows the network to learn how form, confidence, and performance evolve across a season, providing a more dynamic and realistic representation of team behavior.
+You can remove this section or comment it out, as it only contains instructions for how to use this template. You may use subsections in your document as you find appropriate.
 
-By combining the TA’s feedback on feature realism with this temporal RNN framework, our model will shift from static predictions toward sequence-aware forecasting. This advancement will improve predictive power while maintaining interpretability and real-world applicability.
+\subsection{Tables and figures}
 
-\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning, footballdata}
+See Table~\ref{citation-guide} for an example of a table and its caption.
+See Figure~\ref{fig:experiments} for an example of a figure and its caption.
 
 
+\begin{figure}[t]
+  \includegraphics[width=\columnwidth]{example-image-golden}
+  \caption{A figure with a caption that runs for more than one line.
+    Example image is usually available through the \texttt{mwe} package
+    without even mentioning it in the preamble.}
+  \label{fig:experiments}
+\end{figure}
+
+\begin{figure*}[t]
+  \includegraphics[width=0.48\linewidth]{example-image-a} \hfill
+  \includegraphics[width=0.48\linewidth]{example-image-b}
+  \caption {A minimal working example to demonstrate how to place
+    two images side-by-side.}
+\end{figure*}
+
+
+\subsection{Citations}
+
+\begin{table*}
+  \centering
+  \begin{tabular}{lll}
+    \hline
+    \textbf{Output}           & \textbf{natbib command} & \textbf{ACL only command} \\
+    \hline
+    \citep{Gusfield:97}       & \verb|\citep|           &                           \\
+    \citealp{Gusfield:97}     & \verb|\citealp|         &                           \\
+    \citet{Gusfield:97}       & \verb|\citet|           &                           \\
+    \citeyearpar{Gusfield:97} & \verb|\citeyearpar|     &                           \\
+    \citeposs{Gusfield:97}    &                         & \verb|\citeposs|          \\
+    \hline
+  \end{tabular}
+  \caption{\label{citation-guide}
+    Citation commands supported by the style file.
+  }
+\end{table*}
+
+Table~\ref{citation-guide} shows the syntax supported by the style files.
+We encourage you to use the natbib styles.
+You can use the command \verb|\citet| (cite in text) to get ``author (year)'' citations, like this citation to a paper by \citet{Gusfield:97}.
+You can use the command \verb|\citep| (cite in parentheses) to get ``(author, year)'' citations \citep{Gusfield:97}.
+You can use the command \verb|\citealp| (alternative cite without parentheses) to get ``author, year'' citations, which is useful for using citations within parentheses (e.g. \citealp{Gusfield:97}).
+
+\subsection{References}
+
+\nocite{Ando2005,andrew2007scalable,rasooli-tetrault-2015}
+
+Many websites where you can find academic papers also allow you to export a bib file for citation or bib formatted entry. Copy this into the \texttt{custom.bib} and you will be able to cite the paper in the \LaTeX{}. You can remove the example entries.
+
+\subsection{Equations}
+
+An example equation is shown below:
+\begin{equation}
+  \label{eq:example}
+  A = \pi r^2
+\end{equation}
+
+Labels for equation numbers, sections, subsections, figures and tables
+are all defined with the \verb|\label{label}| command and cross references
+to them are made with the \verb|\ref{label}| command.
+This an example cross-reference to Equation~\ref{eq:example}. You can also write equations inline, like this: $A=\pi r^2$.
 
 
 % \section*{Limitations}
 
 \section*{Team Contributions}
 
-The project was an equal collaboration between us, with each member contributing approximately one-third of the overall work. All three team members worked together closely through regular calls, discussing ideas, debugging issues, and refining the model implementation in real time. Omar El-Aref primarily focused on structuring the RNN workflow, ensuring chronological data handling, and integrating the training and validation loops. Omar Abdelhamid contributed to model tuning, performance evaluation, and implementing feature scaling and state management across matches and seasons. Khalid worked extensively on the data preprocessing and feature construction, helping ensure the match tables were clean, and consistent. Overall, the development process was highly collaborative.
+Write in this section a few sentences describing the contributions of each team member. What did each member work on? Refer to item 7.
 
 % Bibliography entries for the entire Anthology, followed by custom entries
 %\bibliography{custom,anthology-overleaf-1,anthology-overleaf-2}
