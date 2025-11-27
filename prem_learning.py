@@ -1,199 +1,202 @@
-# learning.py
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader
-
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-
-from data_imports import prepare_training_data, laliga_season_data  # <- your code
-
-# ----------------------
-# 1) Build dataset table (simple version)
-# ----------------------
-def build_training_table(seasons_dict, target_column="Points"):
-    """
-    Create one DataFrame with Season, Team, numeric feature columns, and the target.
-    - Pulls per-team season tables via your build_season_team(...)
-    - Adds Season/Team columns
-    - Concatenates into a single DataFrame
-    - Returns (full_df, feature_cols)
-    """
-    from data_imports import build_season_team  # local import to avoid circulars
-
-    rows = []
-    # Iterate seasons in a stable order
-    for season_key in sorted(seasons_dict.keys()):
-        season_dict = build_season_team(season_key, seasons_dict)  # { team_name: team_df }
-        for team_name, team_df in season_dict.items():
-            df = team_df.copy()
-            df.insert(0, "Team", team_name)      # add 'Team' as first col
-            df.insert(0, "Season", season_key)   # add 'Season' before 'Team'
-            rows.append(df)
-
-    # Stack everything together
-    full = pd.concat(rows, ignore_index=True)
-
-    # Pick numeric columns, then drop Season/Team/target to get the feature list
-    numeric_cols = full.select_dtypes(include=[np.number]).columns.tolist()
-    feature_cols = [c for c in numeric_cols if c != target_column]
-
-    return full, feature_cols
-
-full, feature_cols = build_training_table(laliga_season_data, target_column="Points")
-
-# ----------------------
-# 2) Train/Val split by season (simple, explicit)
-# ----------------------
-# Train on all seasons up to 23-24 => i.e., everything EXCEPT 24-25
-train_seasons = [sk for sk in full["Season"].unique() if sk != "24-25"]
-val_seasons   = ["24-25"]
-
-train_df = full[full["Season"].isin(train_seasons)].reset_index(drop=True)
-val_df   = full[full["Season"].isin(val_seasons)].reset_index(drop=True)
-
-# Build matrices (float32 for PyTorch)
-X_train = train_df[feature_cols].to_numpy(dtype=np.float32)
-y_train = train_df["Points"].to_numpy(dtype=np.float32).reshape(-1, 1)
-
-X_val   = val_df[feature_cols].to_numpy(dtype=np.float32)
-y_val   = val_df["Points"].to_numpy(dtype=np.float32).reshape(-1, 1)
-
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train).astype(np.float32)
-X_val   = scaler.transform(X_val).astype(np.float32)
+import torch.nn.functional as F
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from collections import defaultdict, deque
+from build_dataset import *
+from architecture import *
+from importing_files import prem_season_data
+from torch.utils.data import Dataset, DataLoader, Subset
+from print_results import *
 
 
-def calculate_full_loss(model, criterion, X, y):
-    """Compute loss over the entire dataset (no grads)."""
-    model.eval()
-    with torch.no_grad():
-        preds = model(X)
-        loss = criterion(preds, y)
+
+
+def make_time_split_loaders(dataset, batch_size=64):
+    
+    # Extract all seasons present in the dataset
+    seasons = dataset.matches_df["Season"].unique()
+    seasons_sorted = sorted(seasons)      # ensures correct season order
+    last_season = seasons_sorted[-1]      # choose the final season
+
+    # Build boolean mask for validation rows
+    season_col = dataset.matches_df["Season"].values
+    val_mask = (season_col == last_season)
+
+    # Indices for train and val
+    val_idx = np.where(val_mask)[0]
+    train_idx = np.where(~val_mask)[0]
+
+    print(f"Validation Season: {last_season}")
+    print(f"Train matches: {len(train_idx)}, Validation matches: {len(val_idx)}")
+
+    # Build subsets
+    train_ds = Subset(dataset, train_idx)
+    val_ds   = Subset(dataset, val_idx)
+
+    # Dataloaders
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+
+    return train_loader, val_loader
+
+
+
+def to_device(batch, device):
+    out = {}
+    for k, v in batch.items():
+        if torch.is_tensor(v):
+            out[k] = v.to(device)
+        else:
+            out[k] = v
+    return out
+
+
+def train_one_epoch(model, train_loader, optimizer, criterion, device):
     model.train()
-    return float(loss.item())
+    running_loss = 0.0
+    n_samples = 0
 
-class FootballModel(nn.Module):
-    def __init__(self, input_size, h1=64, h2=32, out_dim=1):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_size, h1),
-            nn.ReLU(),
-            nn.Linear(h1, h2),
-            nn.ReLU(),
-            nn.Linear(h2, out_dim)   # final output layer (regression -> 1)
+    for batch in train_loader:
+        batch = to_device(batch, device)
+        y = batch["y"]                    # (B, 2) true goals
+
+        preds = model(
+            batch["team1_ids"],
+            batch["team2_ids"],
+            batch["ground_flags"],
+            batch["meta_numeric"],
+            batch["h2h_seq"],
+            batch["team1_seq"],
+            batch["team2_seq"],
         )
-    def forward(self, x):
-        return self.net(x)
 
+        loss = criterion(preds, y)
 
-def train_with_minibatch(model, criterion, optimizer,
-                         X_train, y_train, X_val, y_val,
-                         num_iterations, batch_size, check_every,
-                         shuffle_each_epoch=True):
-    """
-    Minibatch trainer with simple modulo batch selection.
-    - No DataLoader; works on full tensors directly.
-    - Optionally reshuffles at the start of each 'epoch' (i.e., when batches wrap).
-    - Logs full-dataset train/val loss every `check_every` iterations.
-    """
-    model.train()
-
-    train_losses, val_losses, iterations = [], [], []
-
-    # Initial logged losses at iteration 0
-    train_losses.append(calculate_full_loss(model, criterion, X_train, y_train))
-    val_losses.append(calculate_full_loss(model, criterion, X_val, y_val))
-    iterations.append(0)
-
-    n_train = X_train.shape[0]
-    batch_size = int(min(max(1, batch_size), n_train))
-    num_batches = (n_train + batch_size - 1) // batch_size  # ceil division
-
-    # Index order (shuffled per epoch if requested)
-    order = torch.arange(n_train)
-
-    for it in range(1, num_iterations + 1):
-        # If we wrapped around (new epoch), optionally reshuffle
-        if shuffle_each_epoch and ((it - 1) % num_batches == 0):
-            order = order[torch.randperm(n_train)]
-
-        batch_id = (it - 1) % num_batches
-        start = batch_id * batch_size
-        end = min(start + batch_size, n_train)
-
-        idx = order[start:end]
-        xb, yb = X_train[idx], y_train[idx]
-
-        optimizer.zero_grad(set_to_none=True)
-        y_hat = model(xb)
-        loss = criterion(y_hat, yb)
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        if it % check_every == 0 or it == num_iterations:
-            tr_loss = calculate_full_loss(model, criterion, X_train, y_train)
-            va_loss = calculate_full_loss(model, criterion, X_val,   y_val)
-            train_losses.append(tr_loss)
-            val_losses.append(va_loss)
-            iterations.append(it)
+        bsz = y.size(0)
+        running_loss += loss.item() * bsz
+        n_samples += bsz
 
-    return train_losses, val_losses, iterations, model
+    avg_loss = running_loss / n_samples
+    return avg_loss
 
-model = FootballModel(input_size=len(feature_cols), h1=64, h2=32, out_dim=1)
-criterion = nn.MSELoss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-X_train_t = torch.tensor(X_train, dtype=torch.float32)
-y_train_t = torch.tensor(y_train, dtype=torch.float32)
-X_val_t   = torch.tensor(X_val,   dtype=torch.float32)
-y_val_t   = torch.tensor(y_val,   dtype=torch.float32)
-
-NUM_ITERS   = 5000
-BATCH_SIZE  = 32
-CHECK_EVERY = 100
-
-train_losses, val_losses, iters, model = train_with_minibatch(
-    model, criterion, optimizer,
-    X_train_t, y_train_t, X_val_t, y_val_t,
-    num_iterations=NUM_ITERS,
-    batch_size=BATCH_SIZE,
-    check_every=CHECK_EVERY,
-    shuffle_each_epoch=True,   # set False to make it fully deterministic
-)
-
-# ----------------------
-# 6) Final validation metrics + per-team table
-# ----------------------
-def predict_full(model, X):
-    """Return model predictions for the entire tensor X as a 1-D NumPy array."""
+@torch.no_grad()
+def evaluate(model, data_loader, criterion, device):
     model.eval()
-    with torch.no_grad():
-        yhat = model(X)
-    model.train()
-    return yhat.detach().cpu().numpy().ravel()
+    running_loss = 0.0
+    n_samples = 0
 
-# 1) Get predictions and flatten targets
-y_pred = predict_full(model, X_val_t)               # shape -> (N,)
-y_true = y_val_t.detach().cpu().numpy().ravel()     # shape -> (N,)
+    exact_score_correct = 0
+    wdl_correct = 0
 
-# 2) Metrics (version-proof RMSE)
-mse  = mean_squared_error(y_true, y_pred)
-rmse = np.sqrt(mse)
-mae  = mean_absolute_error(y_true, y_pred)
-r2   = r2_score(y_true, y_pred)
+    for batch in data_loader:
+        batch = to_device(batch, device)
+        y = batch["y"]                    # (B, 2)
 
-print(f"\n24-25 regression metrics -> RMSE: {rmse:.2f} | MAE: {mae:.2f} | R^2: {r2:.3f}")
+        preds = model(
+            batch["team1_ids"],
+            batch["team2_ids"],
+            batch["ground_flags"],
+            batch["meta_numeric"],
+            batch["h2h_seq"],
+            batch["team1_seq"],
+            batch["team2_seq"],
+        )
 
-# 3) Predicted table for 24-25 (by points prediction)
-val_out = val_df[["Season", "Team"]].copy()
-val_out["Points_true"] = y_true
-val_out["Points_pred"] = y_pred
-val_out["Error"] = val_out["Points_pred"] - val_out["Points_true"]
-val_out = val_out.sort_values("Points_pred", ascending=False).reset_index(drop=True)
+        loss = criterion(preds, y)
 
-print("\nPredicted 24-25 table (by points prediction):")
-print(val_out[["Team","Points_pred","Points_true","Error"]])
+        bsz = y.size(0)
+        running_loss += loss.item() * bsz
+        n_samples += bsz
+
+        # ---- metrics ----
+        # round goals to nearest int for accuracy metrics
+        pred_goals = torch.round(preds).long()   # (B, 2)
+        true_goals = y.long()
+
+        # exact scoreline (e.g. 2-1 exactly)
+        exact_score_correct += (pred_goals == true_goals).all(dim=1).sum().item()
+
+        # W/D/L accuracy
+        pred_diff = pred_goals[:, 0] - pred_goals[:, 1]
+        true_diff = true_goals[:, 0] - true_goals[:, 1]
+
+        pred_result = torch.sign(pred_diff)  # -1,0,1
+        true_result = torch.sign(true_diff)
+
+        wdl_correct += (pred_result == true_result).sum().item()
+
+    avg_loss = running_loss / n_samples
+
+    # RMSE over both goals
+    # (we recompute quickly here)
+    # Collecting all preds+y in memory is nicer, but this is fine for now
+    # If you want exact RMSE, you can accumulate squared error instead.
+    rmse = avg_loss ** 0.5   # since we used MSELoss
+
+    exact_score_acc = exact_score_correct / n_samples
+    wdl_acc = wdl_correct / n_samples
+
+    return {
+        "loss": avg_loss,
+        "rmse": rmse,
+        "exact_score_acc": exact_score_acc,
+        "wdl_acc": wdl_acc,
+    }
+
+
+
+
+dataset = FootballSequenceDataset(prem_season_data, k_form=5, k_h2h=5)
+train_loader, val_loader = make_time_split_loaders(dataset, batch_size=64)
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# === build model ===
+hist_feat_dim = 7        # we defined 7 features in _game_features_from_perspective
+meta_numeric_dim = 3     # B365H, B365D, B365A
+
+model = FootballScorePredictor(
+    num_teams=len(dataset.team_to_id),
+    team_id_emb_dim=16,
+    hist_feat_dim=hist_feat_dim,
+    h2h_hidden_dim=32,
+    team_hidden_dim=32,
+    meta_numeric_dim=meta_numeric_dim,
+    ff_hidden_dim=128,
+    dropout=0.3,
+    share_team_encoders=True,
+).to(device)
+
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+
+# === training loop ===
+num_epochs = 30
+
+for epoch in range(1, num_epochs + 1):
+    train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
+    val_metrics = evaluate(model, val_loader, criterion, device)
+
+    print(
+        f"Epoch {epoch:02d} | "
+        f"train_loss={train_loss:.4f} | "
+        f"val_loss={val_metrics['loss']:.4f} | "
+        f"val_rmse={val_metrics['rmse']:.3f} | "
+        f"val_exact={val_metrics['exact_score_acc']*100:.2f}% | "
+        f"val_wdl={val_metrics['wdl_acc']*100:.2f}%"
+    )
+
+
+
+print_validation_table_predicted(dataset, val_loader, model, device)
