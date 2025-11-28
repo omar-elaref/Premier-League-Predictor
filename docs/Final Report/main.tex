@@ -75,7 +75,11 @@
 
 \section{Introduction}
 
-Here, write a brief introduction to the problem you are solving. This can be adapted from your problem description and motivation from the original proposal. This should be around 0.25-0.5 pages.
+Predicting the outcomes of football competitions and generating full-season league standings is a challenging problem that lies at the intersection of statistics, machine learning, and sports analytics. The English Premier League (EPL), with its twenty teams, dense schedule, and high competitive parity, provides an especially difficult testbed: small changes in form, injuries, or tactics can produce large shifts in results over a season. In this project, we focus on building a data-driven model that uses historical EPL match data and pre-match betting odds to predict both individual match outcomes and the resulting final league table for the 2024--25 season.
+
+Machine learning has been widely applied to sports prediction problems, where structured historical data and clearly defined outcomes make the domain suitable for classification and forecasting tasks. Prior work has proposed general frameworks for sport result prediction that evaluate different families of models and feature sets across multiple sports \citep{Framework-for-Sport-Predictions}, and deep learning has been successfully used to model complex patterns in game results, such as predicting Major League Baseball outcomes from rich statistical inputs \citep{MLB-Prediction-ML}. These efforts build on broader advances in representation learning, regularized optimization, and large-scale model training in machine learning \citep{Ando2005,andrew2007scalable,rasooli-tetrault-2015}, as well as foundational algorithmic and formal-methods ideas that underlie modern data processing pipelines \citep{Gusfield:97,Chandra:81}.
+
+To address this prediction task, we design a model that integrates several forms of pre-match information like team metadata, betting odds, head-to-head history, and each team’s recent form; through a set of specialized encoders whose outputs are combined to forecast the goals scored by each team. This architecture allows the model to learn meaningful patterns in how past performance, momentum, and historical interactions influence future outcomes. Our primary objective is to build a system that can accurately predict match results and produce reliable season-long forecasts, with full implementation details presented later in the report.
 
 \section{Related Work}
 
@@ -91,7 +95,84 @@ Describe any features you used for your model, or how your data was input to you
 
 \section{Implementation}
 
-Describe your model and implementation here. Refer to item 4. This may take around a page.
+Our final model is a multi-encoder neural architecture designed to predict the number of goals scored by each team in a match. Unlike our earlier progress-report model, which relied solely on pre-match betting odds and a single RNN over match sequences, our updated system incorporates multiple sources of football-specific information, enabling more expressive representations and stronger predictive performance.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\columnwidth]{../../Implementation_diagram.png}
+  \caption{High-level architecture of the final multi-encoder goal prediction model.}
+  \label{fig:Implementation_diagram}
+\end{figure}
+
+\subsection{Model Architecture}
+
+The model (Figure~\ref{fig:Implementation_diagram}) consists of four separate encoders whose outputs are combined and passed into a feed-forward prediction module:
+
+\paragraph{Metadata Encoder: } 
+This component embeds team identities using learned team-ID embeddings and encodes contextual numeric inputs such as Bet365 odds. It also incorporates information about which team is home and which is away. These representations capture all information known before entering a match.
+
+\paragraph{Head-to-Head (H2H) Encoder (Encoder 1): }
+A GRU-based sequence encoder processes the last 5 matches played between the two teams, capturing rivalry patterns, historical dominance, and recurring matchup behaviors. The number of past matches used is a tunable hyperparameter.
+
+\paragraph{Team-Form Encoders for Team 1 and Team 2 (Encoder 2 and Encoder 3): }
+Two GRU-based encoders summarize each team’s recent form using their past 5 matches, including goals scored, goals conceded, match results, goal difference, and home/away indicators. When \texttt{share\_team\_encoders=True}, both teams use the same GRU weights, allowing the model to learn a general form representation applicable across all clubs.
+
+\paragraph{Prediction Head.}
+The outputs of the metadata encoder, H2H encoder, and both team-form encoders are concatenated and passed through a feed-forward network that outputs
+\[
+[\hat{g}_1, \hat{g}_2]
+\]
+representing the predicted goals for Team~1 and Team~2. A softplus activation ensures all predictions are non-negative.
+
+\subsection{Training Procedure}
+
+We train the model chronologically. All Premier League seasons from 2010--11 through 2023--24 are used for training, and the 2024--25 season serves as the held-out validation set. Batch construction and feature engineering are handled by our dataset builder (\texttt{build\_dataset.py}), which generates team IDs, historical match sequences, and ground-truth goal labels.
+
+Because the task is goal regression rather than multi-class classification, we use the Poisson Negative Log-Likelihood Loss.
+
+which is appropriate for football scores that typically follow Poisson-like distributions in statistical literature. This choice is also supported by our experimentation with multiple loss functions (detailed later), where PoissonNLLLoss provided superior validation performance.
+
+We optimize the model using Adam with a learning rate of $1\times10^{-4}$ and weight decay of $1\times10^{-5}$.
+
+\subsection{Baselines}
+
+We compare our model against two baselines:
+
+\begin{itemize}
+    \item \textbf{Majority baseline:} predict the most common outcome.
+    \item \textbf{Progress-report RNN model:} a single-sequence RNN using only betting odds and evolving hidden states.
+\end{itemize}
+
+Our updated model outperforms both baselines across exact-score accuracy and Win--Draw--Loss (WDL) accuracy. Because the new architecture incorporates richer contextual information---team identity, matchup history, and recent form---it produces predictions that are both more stable and more reflective of real football dynamics. This demonstrates that adding structured encoders meaningfully improves predictive power over both naive and earlier single-encoder approaches.
+
+\subsection{Model Variants and Ablations}
+
+Throughout development, we experimented with several architectural and training variations to understand how design choices affected predictive performance. Instead of removing entire encoders, our primary ablations focused on two dimensions: loss function selection and layer size/depth tuning.
+
+\paragraph{1. Loss Function Experiments.}
+
+Our early experiments used Mean Squared Error (MSE) for goal regression, but this produced unstable gradients and disproportionately penalized high-scoring matches. We then tested alternatives, including:
+\begin{itemize}
+    \item \textbf{L1 Loss}, which improved robustness to outliers but resulted in overly conservative goal predictions.
+    \item \textbf{Poisson Negative Log-Likelihood (PoissonNLLLoss)}, which assumes a Poisson-like distribution typical of football scoring and produced the most stable and realistic score predictions.
+\end{itemize}
+
+After comparison, PoissonNLLLoss consistently yielded higher WDL accuracy and smoother training dynamics, and therefore became our final loss function.
+
+\paragraph{2. Layer Size and Hidden Dimension Tuning.}
+
+We also varied the size of the GRU hidden layers, team embeddings, and the depth of the feed-forward prediction head to balance model capacity and overfitting. Key variations included:
+\begin{itemize}
+    \item Increasing team ID embedding sizes from 16~$\rightarrow$~32~$\rightarrow$~64
+    \item Increasing GRU hidden sizes for form and H2H encoders (32~$\rightarrow$~64~$\rightarrow$~128)
+    \item Adjusting the feed-forward block from a shallow 1-layer MLP to a deeper 2--3 layer network
+    \item Testing dropout rates between 0.1 and 0.4
+\end{itemize}
+
+These experiments showed that hidden dimensions of 64 and a two-layer feed-forward head provided the best performance without overfitting. Larger networks (e.g., 128--256 hidden units) offered marginal gains but increased training time and tended to overfit high-scoring outliers.
+
+Overall, these ablations refined the architecture and confirmed that performance is most sensitive to the choice of loss function and the expressive capacity of the encoders.
+
 
 \section{Results and Evaluation}
 
