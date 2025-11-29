@@ -200,3 +200,4 @@ for epoch in range(1, num_epochs + 1):
 
 
 print_validation_table_predicted(dataset, val_loader, model, device)
+print_confusion_matrix(dataset, val_loader, model, device, save_path="confusion_matrix.png")

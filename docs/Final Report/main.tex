@@ -83,11 +83,128 @@ Here, talk about the related work you encountered for your approach. Cite at lea
 
 \section{Dataset}
 
-You should write about your dataset here, following the guidelines regarding item 1. This section may be 0.5-1 pages. Depending on your specific dataset, you may want to include subsections for the preprocessing, annotation, etc.
+Our dataset consists of historical English Premier League match data covering seasons 2010–11 through 2024–25, obtained from the public repository \citep{footballdata}. The English Premier League is the top tier of English football, featuring 20 teams that compete in a double round-robin format: each team plays every other team twice (once at home, once away), resulting in 380 matches per season. The dataset spans 15 complete seasons, providing approximately 5,700 total match records for analysis and modeling.
 
-\section{Features}
+The dataset is structured as a sequence of matches ordered chronologically within each season, enabling temporal modeling of team performance and form. Each season's CSV file contains match-level statistics that capture both pre-match expectations and post-match outcomes, making it suitable for developing predictive models that can forecast match results before kickoff.
 
-Describe any features you used for your model, or how your data was input to your model. Are you doing feature engineering or feature selection? Are you learning embeddings? Is it all part of one neural network? Refer to item 2. This may range from 0.25 pages to 0.5 pages.
+\subsection{Dataset Properties}
+
+The dataset contains comprehensive match-level information organized into several categories. Each match record includes the following types of data:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\hline
+\textbf{Category} & \textbf{Example Columns} \\
+\hline
+Match Information & Date, HomeTeam, AwayTeam, Season, Div \\
+Full-time Outcome & FTHG, FTAG, FTR \\
+Half-time Statistics & HTHG, HTAG, HTR \\
+Offensive Metrics & HS, AS, HST, AST, HC, AC \\
+Discipline Statistics & HF, AF, HY, AY, HR, AR \\
+Betting Odds & B365H, B365D, B365A \\
+\hline
+\end{tabular}
+\caption{Column categories included in the Premier League dataset. FTHG/FTAG: full-time home/away goals; HTHG/HTAG: half-time home/away goals; HS/AS: home/away shots; HST/AST: home/away shots on target; HC/AC: home/away corners; HF/AF: home/away fouls; HY/AY: home/away yellow cards; HR/AR: home/away red cards; B365H/B365D/B365A: Bet365 odds for home win/draw/away win.}
+\end{table}
+
+The dataset exhibits several important characteristics for predictive modeling. First, it provides temporal continuity across 15 seasons, allowing models to learn long-term patterns and adapt to evolving team dynamics. Second, the inclusion of pre-match betting odds (Bet365) provides a strong baseline signal, as these odds aggregate expert knowledge, public sentiment, and statistical analysis. Third, the chronological ordering enables proper temporal modeling where predictions for future matches can only use information from past matches.
+
+The dataset contains minimal missing data, with most matches having complete records for goals, results, and betting odds. This high data quality reduces the need for extensive imputation strategies and ensures reliable model training.
+
+\subsection{Preprocessing Operations}
+
+The preprocessing pipeline, implemented in \texttt{build\_dataset.py}, transforms raw match data into a format suitable for sequential modeling. The pipeline consists of several stages: data cleaning, feature extraction, history construction, and data splitting.
+
+\subsubsection{Data Cleaning}
+
+The first stage involves cleaning and standardizing the raw match data:
+\begin{itemize}
+    \item \textbf{Removal of incomplete records}: Matches with missing full-time goals (FTHG, FTAG) or results (FTR) are excluded from the dataset, as these are essential for both training and evaluation.
+    \item \textbf{Betting odds normalization}: Missing odds values are converted to numeric format and filled with 0.0 if unavailable. This occurs rarely in our dataset, as most matches have complete betting odds information.
+    \item \textbf{Date parsing}: Match dates are standardized to ensure proper chronological ordering, which is critical for temporal modeling and preventing data leakage.
+    \item \textbf{Team name standardization}: Team names are normalized to handle variations (e.g., "Manchester United" vs. "Man United") and ensure consistent identification across seasons.
+\end{itemize}
+
+\subsubsection{Feature Extraction}
+
+For each match, we extract features from the perspective of each team using the \texttt{\_game\_features\_from\_perspective} function. This creates a 7-dimensional feature vector per match that captures the essential match outcomes:
+\begin{itemize}
+    \item \textbf{Goals for (gf)}: Number of goals scored by the team in the match
+    \item \textbf{Goals against (ga)}: Number of goals conceded by the team
+    \item \textbf{Goal difference (gd)}: Computed as gf - ga, providing a single metric for match performance
+    \item \textbf{Home indicator (is\_home)}: Binary value (1.0 if playing at home, 0.0 if away), capturing venue effects
+    \item \textbf{Win indicator}: Binary value (1.0 if the team won, 0.0 otherwise)
+    \item \textbf{Draw indicator}: Binary value (1.0 if the match was drawn, 0.0 otherwise)
+    \item \textbf{Loss indicator}: Binary value (1.0 if the team lost, 0.0 otherwise)
+\end{itemize}
+
+This feature representation is designed to be temporally consistent: all features are derived from match outcomes that are known immediately after a match concludes, making them available for predicting future matches. The 7-dimensional vector provides a compact yet informative representation that captures both the quantitative (goals) and qualitative (result) aspects of match performance.
+
+\subsubsection{History Construction}
+
+The preprocessing builds two types of match history sequences that capture different aspects of team performance:
+
+\textbf{Team Form History:}
+For each team, we maintain a rolling window of the last $k_{form}=5$ matches, capturing recent performance trends. This form history is updated incrementally as matches are processed chronologically, ensuring that only information available before each match is used for prediction. The choice of $k_{form}=5$ balances the need for sufficient context to capture momentum and trends while avoiding excessive noise from older matches that may be less relevant to current form.
+
+\textbf{Head-to-Head History:}
+For each team pair, we maintain the last $k_{h2h}=5$ encounters between the two teams, using the same 7-dimensional feature representation. Head-to-head history captures matchup-specific dynamics, such as tactical advantages, psychological factors, and historical dominance patterns. This is particularly valuable for teams with strong historical records against specific opponents, as it allows the model to learn these matchup-specific patterns.
+
+Both history types are constructed incrementally as matches are processed in chronological order. When a team has fewer than $k$ previous matches (e.g., at the start of a season or for newly promoted teams), the history is padded with zero vectors, ensuring consistent input dimensions for the model.
+
+\subsubsection{Data Split}
+
+We employ a chronological train-validation split to prevent temporal data leakage and simulate realistic prediction scenarios:
+\begin{itemize}
+    \item \textbf{Training set}: All matches from seasons 2010–11 through 2023–24, comprising approximately 5,320 matches (14 seasons $\times$ 380 matches per season)
+    \item \textbf{Validation set}: All matches from the 2024–25 season, comprising 380 matches
+\end{itemize}
+
+This split strategy ensures that the model is evaluated on future matches relative to its training data, reflecting how the model would be used in practice to predict upcoming matches. The validation set represents a complete, unseen season, providing a robust evaluation that tests the model's ability to generalize to new seasons with potentially different team compositions, managerial changes, and league dynamics.
+
+The chronological split is critical because football data exhibits strong temporal dependencies: team performance evolves over time, and using future information to predict past matches would create unrealistic performance estimates. By strictly maintaining temporal order, we ensure that our evaluation metrics reflect the model's true predictive capability.
+
+\subsection{Dataset Changes Since Progress Report}
+
+Since the progress report, we made significant changes to address data leakage concerns raised during feedback. The primary modification was the removal of post-match statistics (such as shots, corners, fouls, and cards) from the feature set, as these are only known after a match concludes.
+
+\textbf{Initial Approach:}
+Our first implementation used season-aggregated statistics (average goals, shots, cards, etc.) combined with post-match statistics as features in a feedforward network. While this approach showed promising results, it suffered from data leakage, as many statistics are only available after matches are played.
+
+\textbf{Current Approach:}
+The final implementation uses only pre-match betting odds as explicit input features, with match history sequences constructed from past match outcomes. This ensures that all features used for prediction are available before kickoff, making the model suitable for real-world forecasting applications. The betting odds serve as a strong pre-match signal, while the match history sequences capture temporal patterns in team performance.
+
+This change required restructuring the preprocessing pipeline to focus on outcome-based features rather than in-game statistics. The resulting model is more realistic and deployable, as it can make predictions using only information that would be available to a human analyst before a match begins.
+
+
+
+\section{Features and Inputs}
+
+Our model uses a carefully designed set of features that capture both pre-match expectations and historical team performance patterns. All inputs are available before a match begins, ensuring realistic and deployable predictions.
+
+\subsection{Feature Components}
+
+\textbf{Pre-Match Features:}
+The primary pre-match features are Bet365 betting odds (\texttt{B365H}, \texttt{B365D}, \texttt{B365A}), which represent bookmaker assessments of match outcome probabilities. These odds aggregate expert knowledge, public sentiment, and statistical analysis. We also use learned embeddings for team identities (16-dimensional) and ground effects (4-dimensional), capturing intrinsic team characteristics and home advantage.
+
+\textbf{Historical Sequence Features:}
+We construct two types of match history sequences:
+\begin{itemize}
+    \item \textbf{Team form history}: Last $k_{form}=5$ matches per team, each represented by a 7-dimensional vector (goals for/against/difference, home/away indicator, win/draw/loss indicators). Processed by a GRU encoder to produce a 32-dimensional representation of recent performance trends.
+    \item \textbf{Head-to-head history}: Last $k_{h2h}=5$ encounters between each team pair, using the same 7-dimensional representation. Also encoded by a GRU to capture matchup-specific dynamics and historical dominance patterns.
+\end{itemize}
+
+The choice of $k=5$ balances sufficient context with computational efficiency, avoiding noise from older matches while capturing recent momentum.
+
+\subsection{Feature Engineering Rationale}
+
+Following feedback from the progress review, we restricted features to those available before match time. Betting odds are the only explicit pre-match statistics, while all other features are derived from historical match outcomes. The sequential nature of team form and head-to-head histories allows the model to capture temporal dependencies, preserving match order rather than using aggregated statistics. The model employs learned embeddings and GRU encoders to discover latent team characteristics and extract relevant patterns from match sequences.
+
+\subsection{Input Representation}
+
+The final input concatenates: team ID embeddings for both teams (16 dimensions each), ground embedding (4 dimensions), betting odds vector (3 dimensions), and encoded histories for team 1 form, team 2 form, and head-to-head (32 dimensions each from GRU encoders). This combined representation is passed through a feedforward network to predict the final scoreline (home goals, away goals), enabling joint learning of feature interactions and temporal patterns.
+
 
 \section{Implementation}
 
@@ -155,7 +272,7 @@ You can use the command \verb|\citealp| (alternative cite without parentheses) t
 
 \subsection{References}
 
-\nocite{Ando2005,andrew2007scalable,rasooli-tetrault-2015}
+\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning, footballdata}
 
 Many websites where you can find academic papers also allow you to export a bib file for citation or bib formatted entry. Copy this into the \texttt{custom.bib} and you will be able to cite the paper in the \LaTeX{}. You can remove the example entries.
 
