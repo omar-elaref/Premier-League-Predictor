@@ -318,7 +318,7 @@ These metrics are computed for each of the three outcome classes, as well as mac
 
 \subsection{Results}
 
-Table~\ref{tab:classification_metrics} presents the classification performance metrics for our model on the 2024–25 validation season. The model achieves an overall accuracy of 47.37\% (180 out of 380 matches correctly predicted). The per-class metrics reveal significant performance variation across outcome types.
+Table~\ref{tab:classification_metrics} presents the classification performance metrics for our model on the 2024–25 validation season. The model achieves an overall accuracy of 51.58\% (196 out of 380 matches correctly predicted). The per-class metrics reveal significant performance variation across outcome types.
 
 \begin{table}[h]
 \centering
@@ -326,20 +326,20 @@ Table~\ref{tab:classification_metrics} presents the classification performance m
 \hline
 \textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-score} & \textbf{Support} \\
 \hline
-Home & 0.54 & 0.67 & 0.60 & 155 \\
-Draw & 0.27 & 0.30 & 0.29 & 93 \\
-Away & 0.56 & 0.36 & 0.44 & 132 \\
+Home & 0.57 & 0.72 & 0.64 & 155 \\
+Draw & 0.29 & 0.32 & 0.31 & 93 \\
+Away & 0.65 & 0.41 & 0.50 & 132 \\
 \hline
-\textbf{Accuracy} & \multicolumn{4}{c}{0.4737 (180/380)} \\
-\textbf{Macro Avg} & 0.46 & 0.45 & 0.44 & 380 \\
-\textbf{Weighted Avg} & 0.48 & 0.47 & 0.47 & 380 \\
+\textbf{Accuracy} & \multicolumn{4}{c}{0.5158 (196/380)} \\
+\textbf{Macro Avg} & 0.51 & 0.48 & 0.48 & 380 \\
+\textbf{Weighted Avg} & 0.53 & 0.52 & 0.51 & 380 \\
 \hline
 \end{tabular}
 \caption{Classification metrics for match outcome prediction on the 2024–25 validation season.}
 \label{tab:classification_metrics}
 \end{table}
 
-The model demonstrates its strongest performance on Home wins, achieving a precision of 0.54, recall of 0.67, and F1-score of 0.60. This reflects the model's ability to leverage home advantage signals from betting odds and historical sequences. Performance on Away wins is also strong, with precision of 0.56 and recall of 0.36, resulting in an F1-score of 0.44. The model struggles most with Draw predictions, achieving the lowest metrics across all classes (precision 0.27, recall 0.30, F1-score 0.29), which is consistent with the difficulty of predicting draws in football.
+The model demonstrates its strongest performance on Home wins, achieving a precision of 0.57, recall of 0.72, and F1-score of 0.64. This reflects the model's ability to leverage home advantage signals from betting odds and historical sequences. Performance on Away wins is also strong, with precision of 0.65 and recall of 0.41, resulting in an F1-score of 0.50. The model struggles most with Draw predictions, achieving the lowest metrics across all classes (precision 0.29, recall 0.32, F1-score 0.31), which is consistent with the difficulty of predicting draws in football.
 
 Figure~\ref{fig:confusion_matrix} visualizes the confusion matrix, revealing detailed patterns in prediction errors. The matrix shows that the model correctly predicts 104 Home wins but misclassifies 32 Home wins as Draws and 19 as Away wins. For Draws, the model correctly identifies only 28 out of 93 cases, with 47 misclassified as Home wins and 18 as Away wins. For Away wins, the model correctly predicts 48 cases, with 42 misclassified as Home wins and 42 as Draws. This pattern suggests that the model has a slight bias toward predicting Home wins, which reflects the home advantage effect captured in the training data.
 
