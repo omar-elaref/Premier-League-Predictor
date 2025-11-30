@@ -55,7 +55,7 @@ def to_device(batch, device):
             out[k] = v
     return out
 
-
+# training and evaluation functions
 def train_one_epoch(model, train_loader, optimizer, criterion, device):
     model.train()
     running_loss = 0.0
@@ -118,7 +118,7 @@ def evaluate(model, data_loader, criterion, device):
         running_loss += loss.item() * bsz
         n_samples += bsz
 
-        # ---- metrics ----
+        # metrics 
         # round goals to nearest int for accuracy metrics
         pred_goals = torch.round(preds).long()   # (B, 2)
         true_goals = y.long()

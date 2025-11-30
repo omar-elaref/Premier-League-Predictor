@@ -23,8 +23,8 @@ class MatchHistoryEncoder(nn.Module):
     def forward(self, x):
         # x: (B, T, F)
         _, h_n = self.gru(x)  # h_n: (num_layers * num_directions, B, H)
-        # take last layer
-        h_last = h_n[-1]      # (B, H * directions)
+        # previous layer
+        h_last = h_n[-1]      
         return h_last
 
 
@@ -44,13 +44,13 @@ class FootballScorePredictor(nn.Module):
     ):
         super().__init__()
 
-        # --- Team ID embeddings ---
+        # Team ID embeddings 
         self.team_emb = nn.Embedding(num_teams, team_id_emb_dim)
 
-        # Ground (home/away) as tiny embedding (2 values: 0=home,1=away) if you want
+        # Ground (home/away) as tiny embedding (2 values: 0=home,1=away)
         self.ground_emb = nn.Embedding(2, 4)
 
-        # --- Encoders ---
+        # Encoders
         # Enc1: head-to-head history
         self.h2h_encoder = MatchHistoryEncoder(hist_feat_dim, h2h_hidden_dim)
 
@@ -62,7 +62,7 @@ class FootballScorePredictor(nn.Module):
         else:
             self.team_encoder2 = MatchHistoryEncoder(hist_feat_dim, team_hidden_dim)
 
-        # --- Metadata projection ---
+        # Metadata projection 
         # metadata = [team1_emb, team2_emb, ground_emb, numeric_meta]
         meta_in_dim = 2 * team_id_emb_dim + 4 + meta_numeric_dim
         self.meta_mlp = nn.Sequential(
@@ -71,7 +71,7 @@ class FootballScorePredictor(nn.Module):
             nn.Dropout(dropout),
         )
 
-        # --- Final FF combining everything ---
+        # Final FF combining everything
         total_in = self.h2h_encoder.output_dim + 2 * self.team_encoder1.output_dim + ff_hidden_dim
         self.ff = nn.Sequential(
             nn.Linear(total_in, ff_hidden_dim),
@@ -80,7 +80,7 @@ class FootballScorePredictor(nn.Module):
             nn.Linear(ff_hidden_dim, ff_hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(ff_hidden_dim // 2, 2),  # [goals_team1, goals_team2]
+            nn.Linear(ff_hidden_dim // 2, 2),  # goals for both teams, [goals_team1, goals_team2]
         )
 
     def forward(
@@ -93,7 +93,7 @@ class FootballScorePredictor(nn.Module):
         team1_seq,          # (B, T_team, hist_feat_dim)
         team2_seq           # (B, T_team, hist_feat_dim)
     ):
-        # --- Embeddings for metadata ---
+        # Embeddings for metadata 
         t1_emb = self.team_emb(team1_ids)       # (B, team_id_emb_dim)
         t2_emb = self.team_emb(team2_ids)       # (B, team_id_emb_dim)
         g_emb = self.ground_emb(ground_flags)   # (B, 4)
@@ -101,12 +101,12 @@ class FootballScorePredictor(nn.Module):
         meta = torch.cat([t1_emb, t2_emb, g_emb, meta_numeric], dim=-1)  # (B, meta_in_dim)
         meta_repr = self.meta_mlp(meta)  # (B, ff_hidden_dim)
 
-        # --- Encoders ---
+        # Encoders
         h_h2h = self.h2h_encoder(h2h_seq)           # (B, h2h_hidden_dim[*2])
         h_t1  = self.team_encoder1(team1_seq)       # (B, team_hidden_dim[*2])
         h_t2  = self.team_encoder2(team2_seq)       # (B, team_hidden_dim[*2])
 
-        # --- Combine ---
+        # Combine
         combined = torch.cat([meta_repr, h_h2h, h_t1, h_t2], dim=-1)
         goals = self.ff(combined)   # (B, 2)
 
@@ -134,7 +134,7 @@ class FootballSequenceDataset(Dataset):
         self.y_goals = data["y_goals"]
 
         self.team_to_id = data["team_to_id"]
-        self.matches_df = data["matches_df"]  # optional, for debugging
+        self.matches_df = data["matches_df"]  # optional, used for debugging
 
     def __len__(self):
         return self.y_goals.shape[0]
