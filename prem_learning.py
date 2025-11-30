@@ -63,7 +63,7 @@ def train_one_epoch(model, train_loader, optimizer, criterion, device):
 
     for batch in train_loader:
         batch = to_device(batch, device)
-        y = batch["y"]                    # (B, 2) true goals
+        y = batch["y"].float()                    # (B, 2) true goals
 
         preds = model(
             batch["team1_ids"],
@@ -97,10 +97,11 @@ def evaluate(model, data_loader, criterion, device):
 
     exact_score_correct = 0
     wdl_correct = 0
+    se_sum = 0.0
 
     for batch in data_loader:
         batch = to_device(batch, device)
-        y = batch["y"]                    # (B, 2)
+        y = batch["y"].float()                    # (B, 2)
 
         preds = model(
             batch["team1_ids"],
@@ -117,47 +118,43 @@ def evaluate(model, data_loader, criterion, device):
         bsz = y.size(0)
         running_loss += loss.item() * bsz
         n_samples += bsz
+        se_sum += ((preds - y) ** 2).sum().item()
 
         # metrics 
         # round goals to nearest int for accuracy metrics
-        pred_goals = torch.round(preds).long()   # (B, 2)
+        pred_goals = torch.round(preds).long()      # (B, 2)
         true_goals = y.long()
 
-        # exact scoreline (e.g. 2-1 exactly)
         exact_score_correct += (pred_goals == true_goals).all(dim=1).sum().item()
 
-        # W/D/L accuracy
-        pred_diff = pred_goals[:, 0] - pred_goals[:, 1]
+        # W/D/L accuracy using a 0.5 draw margin on continuous preds
         true_diff = true_goals[:, 0] - true_goals[:, 1]
+        true_result = torch.sign(true_diff)      
 
-        pred_result = torch.sign(pred_diff)  # -1,0,1
-        true_result = torch.sign(true_diff)
+        pred_diff = preds[:, 0] - preds[:, 1] 
+
+        draw_margin = 0.55
+        pred_result = torch.zeros_like(true_diff)
+
+        pred_result[pred_diff >  draw_margin]  = 1  
+        pred_result[pred_diff < -draw_margin] = -1  
 
         wdl_correct += (pred_result == true_result).sum().item()
 
     avg_loss = running_loss / n_samples
 
-    # RMSE over both goals
-    # (we recompute quickly here)
-    # Collecting all preds+y in memory is nicer, but this is fine for now
-    # If you want exact RMSE, you can accumulate squared error instead.
-    rmse = avg_loss ** 0.5   # since we used MSELoss
-
-    exact_score_acc = exact_score_correct / n_samples
-    wdl_acc = wdl_correct / n_samples
+    rmse = (se_sum / (n_samples * 2)) ** 0.5
 
     return {
         "loss": avg_loss,
         "rmse": rmse,
-        "exact_score_acc": exact_score_acc,
-        "wdl_acc": wdl_acc,
     }
 
 
 
 
-dataset = FootballSequenceDataset(prem_season_data, k_form=5, k_h2h=5)
-train_loader, val_loader = make_time_split_loaders(dataset, batch_size=64)
+dataset = FootballSequenceDataset(prem_season_data, k_form=5, k_h2h=4)
+train_loader, val_loader = make_time_split_loaders(dataset, batch_size=32)
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -168,21 +165,21 @@ meta_numeric_dim = 3     # B365H, B365D, B365A
 
 model = FootballScorePredictor(
     num_teams=len(dataset.team_to_id),
-    team_id_emb_dim=16,
+    team_id_emb_dim=32,
     hist_feat_dim=hist_feat_dim,
-    h2h_hidden_dim=32,
-    team_hidden_dim=32,
+    h2h_hidden_dim=64,
+    team_hidden_dim=64,
     meta_numeric_dim=meta_numeric_dim,
-    ff_hidden_dim=128,
-    dropout=0.3,
+    ff_hidden_dim=256,
+    dropout=0.4,
     share_team_encoders=True,
 ).to(device)
 
-criterion = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+criterion = nn.PoissonNLLLoss(log_input=False)
+optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=1e-4)
 
 # === training loop ===
-num_epochs = 30
+num_epochs = 25
 
 for epoch in range(1, num_epochs + 1):
     train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
@@ -193,8 +190,6 @@ for epoch in range(1, num_epochs + 1):
         f"train_loss={train_loss:.4f} | "
         f"val_loss={val_metrics['loss']:.4f} | "
         f"val_rmse={val_metrics['rmse']:.3f} | "
-        f"val_exact={val_metrics['exact_score_acc']*100:.2f}% | "
-        f"val_wdl={val_metrics['wdl_acc']*100:.2f}%"
     )
 
 
