@@ -82,9 +82,6 @@ Machine learning has been widely applied to sports prediction problems, where st
 
 To address this prediction task, we design a model that integrates several forms of pre-match information like team metadata, betting odds, head-to-head history, and each team’s recent form; through a set of specialized encoders whose outputs are combined to forecast the goals scored by each team. This architecture allows the model to learn meaningful patterns in how past performance, momentum, and historical interactions influence future outcomes. Our primary objective is to build a system that can accurately predict match results and produce reliable season-long forecasts, with full implementation details presented later in the report.
 
-\section{Related Work}
-
-Here, talk about the related work you encountered for your approach. Cite at least 5 references. Refer to item 2. No one has done exactly your task? Write about the most similar thing you can find. This should be around 0.25-0.5 pages.
 
 \section{Dataset}
 
@@ -316,7 +313,7 @@ We evaluate our model using a comprehensive set of classification metrics approp
 
 These metrics are computed for each of the three outcome classes, as well as macro-averaged and weighted-averaged across all classes.
 
-\subsection{Results}
+\subsection{Results}\label{ssec:Results}
 
 Table~\ref{tab:classification_metrics} presents the classification performance metrics for our model on the 2024–25 validation season. The model achieves an overall accuracy of 51.58\% (196 out of 380 matches correctly predicted). The per-class metrics reveal significant performance variation across outcome types.
 
@@ -356,87 +353,39 @@ The metrics selected for evaluation have proven adequate for assessing model per
 
 Compared to the progress report stage, our current metrics remain consistent, but the results reflect improvements in model architecture and feature engineering. The progress report metrics revealed a severe bias toward Home win predictions, with zero Draw predictions. While the current model still struggles with Draws, it now makes some correct Draw predictions (28 out of 93), indicating progress in addressing class imbalance. The metrics highlight areas for improvement, particularly the need for better Draw prediction capability, which could be addressed through techniques such as more sophisticated sequence modeling approaches.
 
-\section{Feedback and Plans}
+\section{Progress}
+In the progress report we promised to strip post match stats, keep only prematch features, and use a chronological split. We followed through: the dataset now uses only pre kickoff odds plus outcome derived histories, built in time order to avoid leakage, and we train on past seasons with the final season held out. We did pivot on modeling: instead of the simple odd only RNN, we built a multi encoder GRU (team form, head-to-head, team/home embeddings, odds MLP) and predict scorelines, deriving W/D/L for metrics. We also added a validation league table as planned. What slipped: we didn’t run a full hyperparameter sweep or calibration, and draw handling is still weak, however it has improved over previous draw odds.
 
-Write about your plans for the remainder of the project. This should include a discussion of the feedback you received from your TA, and how you plan to improve your approach. Reflect on your implementation and areas for improvement. Refer to item 6. This may be around 0.5 pages.
+\section{Error Analysis}
 
-\section{Template Notes}
+We examine errors on the held-out 2024–25 season using the same chronological split described in Section~\ref{ssec:Results}. Accuracy is 51.58\% (196/380), but class-wise behavior varies (Table~\ref{tab:classification_metrics}). The confusion matrix (Fig.~\ref{fig:confusion_matrix}) is our primary diagnostic.
 
-You can remove this section or comment it out, as it only contains instructions for how to use this template. You may use subsections in your document as you find appropriate.
+\textbf{What the model gets right.}
+Home wins are the strongest class (P/R/F1 = 0.57/0.72/0.64). Away wins are middling (0.65/0.41/0.50). Clear home-favored fixtures and lopsided matches tend to be predicted correctly.
 
-\subsection{Tables and figures}
+\textbf{What the model gets wrong.}
+Draws remain the weakest (0.29/0.32/0.31). In the confusion matrix, 47/93 true draws are pushed to Home and 18/93 to Away. Away wins are also overcalled as Home (42/132) or Draw (42/132). This shows a slight home-lean and difficulty with balanced fixtures.
 
-See Table~\ref{citation-guide} for an example of a table and its caption.
-See Figure~\ref{fig:experiments} for an example of a figure and its caption.
+\textbf{Patterns and bias.}
+Most misclassifications cluster around close games: draws are converted to wins, and away wins are nudged toward home. The model captures home-advantage signals but is overconfident in tight matches.
 
+\textbf{How to address it.}
+To improve draws and reduce home bias, we would (1) rebalance the loss (class weights or focal loss), (2) add a draw-aware head (joint goal and outcome prediction), and (3) calibrate outputs to temper overconfident home predictions. Additional diagnostics we would include are residual histograms for goal errors and a short list of worst-missed fixtures (high goal error or wrong outcome) to target data or loss tweaks.
 
-\begin{figure}[t]
-  \includegraphics[width=\columnwidth]{example-image-golden}
-  \caption{A figure with a caption that runs for more than one line.
-    Example image is usually available through the \texttt{mwe} package
-    without even mentioning it in the preamble.}
-  \label{fig:experiments}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\columnwidth]{../../confusion_matrix.png}
+  \caption{Confusion matrix for match outcome predictions on the 2024–25 season. Rows are true labels, columns are predicted labels.}
+  \label{fig:confusion_matrix}
 \end{figure}
 
-\begin{figure*}[t]
-  \includegraphics[width=0.48\linewidth]{example-image-a} \hfill
-  \includegraphics[width=0.48\linewidth]{example-image-b}
-  \caption {A minimal working example to demonstrate how to place
-    two images side-by-side.}
-\end{figure*}
 
-
-\subsection{Citations}
-
-\begin{table*}
-  \centering
-  \begin{tabular}{lll}
-    \hline
-    \textbf{Output}           & \textbf{natbib command} & \textbf{ACL only command} \\
-    \hline
-    \citep{Gusfield:97}       & \verb|\citep|           &                           \\
-    \citealp{Gusfield:97}     & \verb|\citealp|         &                           \\
-    \citet{Gusfield:97}       & \verb|\citet|           &                           \\
-    \citeyearpar{Gusfield:97} & \verb|\citeyearpar|     &                           \\
-    \citeposs{Gusfield:97}    &                         & \verb|\citeposs|          \\
-    \hline
-  \end{tabular}
-  \caption{\label{citation-guide}
-    Citation commands supported by the style file.
-  }
-\end{table*}
-
-Table~\ref{citation-guide} shows the syntax supported by the style files.
-We encourage you to use the natbib styles.
-You can use the command \verb|\citet| (cite in text) to get ``author (year)'' citations, like this citation to a paper by \citet{Gusfield:97}.
-You can use the command \verb|\citep| (cite in parentheses) to get ``(author, year)'' citations \citep{Gusfield:97}.
-You can use the command \verb|\citealp| (alternative cite without parentheses) to get ``author, year'' citations, which is useful for using citations within parentheses (e.g. \citealp{Gusfield:97}).
-
-\subsection{References}
-
-\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning, footballdata}
-
-Many websites where you can find academic papers also allow you to export a bib file for citation or bib formatted entry. Copy this into the \texttt{custom.bib} and you will be able to cite the paper in the \LaTeX{}. You can remove the example entries.
-
-\subsection{Equations}
-
-An example equation is shown below:
-\begin{equation}
-  \label{eq:example}
-  A = \pi r^2
-\end{equation}
-
-Labels for equation numbers, sections, subsections, figures and tables
-are all defined with the \verb|\label{label}| command and cross references
-to them are made with the \verb|\ref{label}| command.
-This an example cross-reference to Equation~\ref{eq:example}. You can also write equations inline, like this: $A=\pi r^2$.
 
 
 % \section*{Limitations}
 
 \section*{Team Contributions}
 
-Write in this section a few sentences describing the contributions of each team member. What did each member work on? Refer to item 7.
 
 % Bibliography entries for the entire Anthology, followed by custom entries
 %\bibliography{custom,anthology-overleaf-1,anthology-overleaf-2}
