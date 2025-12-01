@@ -147,7 +147,7 @@ The preprocessing builds two types of match history sequences that capture diffe
 For each team, we maintain a window of the last $k_{form}=5$ matches, capturing recent form of the team. This form history is updated incrementally as matches are processed chronologically, ensuring that only information available before each match is used for prediction. The choice of $k_{form}=5$ balances the need for sufficient context to capture momentum and trends while avoiding excessive noise from older matches that may be less relevant to current form.
 
 \textbf{Head-to-Head History:}
-For each team pair, we maintain the last $k_{h2h}=5$ encounters between the two teams, using the same 7-dimensional feature representation. Head-to-head history captures matchup specific information, such as tactical advantages, psychological factors, and historical dominance patterns. This is particularly valuable for teams with strong historical records against specific opponents, as it allows the model to learn these matchup-specific patterns.
+For each team pair, we maintain the last $k_{h2h}=4$ encounters between the two teams, using the same 7-dimensional feature representation. Head-to-head history captures matchup specific information, such as tactical advantages, psychological factors, and historical dominance patterns. This is particularly valuable for teams with strong historical records against specific opponents, as it allows the model to learn these matchup-specific patterns.
 
 Both history types are constructed incrementally as matches are processed in chronological order. When a team has fewer than $k$ previous matches (e.g., at the start of a season or for newly promoted teams), the history is padded with zero vectors, ensuring consistent input dimensions for the model.
 
@@ -188,7 +188,7 @@ The primary pre-match features are Bet365 betting odds (\texttt{B365H}, \texttt{
 We construct two types of match history sequences:
 \begin{itemize}
     \item \textbf{Team form history}: Last $k_{form}=5$ matches per team, each represented by a 7-dimensional vector (goals for/against/difference, home/away indicator, win/draw/loss indicators). Processed by a GRU encoder to produce a 32-dimensional representation of recent performance trends.
-    \item \textbf{Head-to-head history}: Last $k_{h2h}=5$ encounters between each team pair, using the same 7-dimensional representation. Also encoded by a GRU to capture matchup-specific dynamics and historical dominance patterns.
+    \item \textbf{Head-to-head history}: Last $k_{h2h}=4$ encounters between each team pair, using the same 7-dimensional representation. Also encoded by a GRU to capture matchup-specific dynamics and historical dominance patterns.
 \end{itemize}
 
 The choice of $k=5$ balances sufficient context with computational efficiency, avoiding noise from older matches while capturing recent momentum.
@@ -241,7 +241,7 @@ Because the task is goal regression rather than multi-class classification, we u
 
 which is appropriate for football scores that typically follow Poisson-like distributions in statistical literature. This choice is also supported by our experimentation with multiple loss functions (detailed later), where PoissonNLLLoss provided superior validation performance.
 
-We optimize the model using Adam with a learning rate of $1\times10^{-4}$ and weight decay of $1\times10^{-5}$.
+We optimize the model using Adam with a learning rate of $3\times10^{-4}$ and weight decay of $1\times10^{-4}$.
 
 \subsection{Baselines}
 
@@ -338,14 +338,8 @@ Away & 0.65 & 0.41 & 0.50 & 132 \\
 
 The model demonstrates its strongest performance on Home wins, achieving a precision of 0.57, recall of 0.72, and F1-score of 0.64. This reflects the model's ability to leverage home advantage signals from betting odds and historical sequences. Performance on Away wins is also strong, with precision of 0.65 and recall of 0.41, resulting in an F1-score of 0.50. The model struggles most with Draw predictions, achieving the lowest metrics across all classes (precision 0.29, recall 0.32, F1-score 0.31), which is consistent with the difficulty of predicting draws in football.
 
-Figure~\ref{fig:confusion_matrix} visualizes the confusion matrix, revealing detailed patterns in prediction errors. The matrix shows that the model correctly predicts 104 Home wins but misclassifies 32 Home wins as Draws and 19 as Away wins. For Draws, the model correctly identifies only 28 out of 93 cases, with 47 misclassified as Home wins and 18 as Away wins. For Away wins, the model correctly predicts 48 cases, with 42 misclassified as Home wins and 42 as Draws. This pattern suggests that the model has a slight bias toward predicting Home wins, which reflects the home advantage effect captured in the training data.
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.9\columnwidth]{../../confusion_matrix.png}
-  \caption{Confusion matrix for match outcome predictions on the 2024–25 Premier League season. Rows represent true labels, columns represent predicted labels.}
-  \label{fig:confusion_matrix}
-\end{figure}
+
 
 \subsection{Adequacy of Metrics}
 
@@ -372,6 +366,8 @@ Most misclassifications cluster around close games: draws are converted to wins,
 \textbf{How to address it.}
 To improve draws and reduce home bias, we would (1) rebalance the loss (class weights or focal loss), (2) add a draw-aware head (joint goal and outcome prediction), and (3) calibrate outputs to temper overconfident home predictions. Additional diagnostics we would include are residual histograms for goal errors and a short list of worst-missed fixtures (high goal error or wrong outcome) to target data or loss tweaks.
 
+Figure~\ref{fig:confusion_matrix} visualizes the confusion matrix, revealing detailed patterns in prediction errors. The matrix shows that the model correctly predicts 112 Home wins but misclassifies 32 Home wins as Draws and 11 as Away wins. For Draws, the model correctly identifies only 30 out of 93 cases, with 45 misclassified as Home wins and 18 as Away wins. For Away wins, the model correctly predicts 54 cases, with 38 misclassified as Home wins and 40 as Draws. This pattern suggests that the model has a slight bias toward predicting Home wins, which reflects the home advantage effect captured in the training data.
+
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.9\columnwidth]{../../confusion_matrix.png}
@@ -393,6 +389,8 @@ The project was an equal collaboration between the three of us, with each member
 
 % Custom bibliography entries only
 \bibliography{custom}
+
+\nocite{armantee2025,nyquist2017deep,dixon1997modelling,constantinou2012pifootball,hubacek2019learning, footballdata, andrew2007scalable,Framework-for-Sport-Predictions,Chandra:81}
 
 % \appendix
 
