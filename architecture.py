@@ -21,9 +21,7 @@ class MatchHistoryEncoder(nn.Module):
         self.output_dim = hidden_dim * (2 if bidirectional else 1)
 
     def forward(self, x):
-        # x: (B, T, F)
-        _, h_n = self.gru(x)  # h_n: (num_layers * num_directions, B, H)
-        # previous layer
+        _, h_n = self.gru(x)
         h_last = h_n[-1]      
         return h_last
 
@@ -37,24 +35,19 @@ class FootballScorePredictor(nn.Module):
         hist_feat_dim: int,
         h2h_hidden_dim: int,
         team_hidden_dim: int,
-        meta_numeric_dim: int,   # e.g. 3 for B365H/B365D/B365A + maybe 1 for home/away flag
+        meta_numeric_dim: int,
         ff_hidden_dim: int = 128,
         dropout: float = 0.2,
         share_team_encoders: bool = True,
     ):
         super().__init__()
 
-        # Team ID embeddings 
         self.team_emb = nn.Embedding(num_teams, team_id_emb_dim)
 
-        # Ground (home/away) as tiny embedding (2 values: 0=home,1=away)
         self.ground_emb = nn.Embedding(2, 4)
 
-        # Encoders
-        # Enc1: head-to-head history
         self.h2h_encoder = MatchHistoryEncoder(hist_feat_dim, h2h_hidden_dim)
 
-        # Enc2 and Enc3: form of each team
         self.share_team_encoders = share_team_encoders
         self.team_encoder1 = MatchHistoryEncoder(hist_feat_dim, team_hidden_dim)
         if share_team_encoders:
@@ -62,8 +55,6 @@ class FootballScorePredictor(nn.Module):
         else:
             self.team_encoder2 = MatchHistoryEncoder(hist_feat_dim, team_hidden_dim)
 
-        # Metadata projection 
-        # metadata = [team1_emb, team2_emb, ground_emb, numeric_meta]
         meta_in_dim = 2 * team_id_emb_dim + 4 + meta_numeric_dim
         self.meta_mlp = nn.Sequential(
             nn.Linear(meta_in_dim, ff_hidden_dim),
@@ -71,7 +62,6 @@ class FootballScorePredictor(nn.Module):
             nn.Dropout(dropout),
         )
 
-        # Final FF combining everything
         total_in = self.h2h_encoder.output_dim + 2 * self.team_encoder1.output_dim + ff_hidden_dim
         self.ff = nn.Sequential(
             nn.Linear(total_in, ff_hidden_dim),
@@ -80,40 +70,37 @@ class FootballScorePredictor(nn.Module):
             nn.Linear(ff_hidden_dim, ff_hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(ff_hidden_dim // 2, 2),  # goals for both teams, [goals_team1, goals_team2]
+            nn.Linear(ff_hidden_dim // 2, 2),
         )
 
     def forward(
         self,
-        team1_ids,          # (B,)
-        team2_ids,          # (B,)
-        ground_flags,       # (B,) 0=team1_home, 1=team2_home or similar
-        meta_numeric,       # (B, meta_numeric_dim) e.g. [B365H,B365D,B365A]
-        h2h_seq,            # (B, T_h2h, hist_feat_dim)
-        team1_seq,          # (B, T_team, hist_feat_dim)
-        team2_seq           # (B, T_team, hist_feat_dim)
+        team1_ids,          
+        team2_ids,          
+        ground_flags,       
+        meta_numeric,      
+        h2h_seq,            
+        team1_seq,          
+        team2_seq          
     ):
-        # Embeddings for metadata 
-        t1_emb = self.team_emb(team1_ids)       # (B, team_id_emb_dim)
-        t2_emb = self.team_emb(team2_ids)       # (B, team_id_emb_dim)
-        g_emb = self.ground_emb(ground_flags)   # (B, 4)
 
-        meta = torch.cat([t1_emb, t2_emb, g_emb, meta_numeric], dim=-1)  # (B, meta_in_dim)
-        meta_repr = self.meta_mlp(meta)  # (B, ff_hidden_dim)
+        t1_emb = self.team_emb(team1_ids)
+        t2_emb = self.team_emb(team2_ids)
+        g_emb = self.ground_emb(ground_flags)
 
-        # Encoders
-        h_h2h = self.h2h_encoder(h2h_seq)           # (B, h2h_hidden_dim[*2])
-        h_t1  = self.team_encoder1(team1_seq)       # (B, team_hidden_dim[*2])
-        h_t2  = self.team_encoder2(team2_seq)       # (B, team_hidden_dim[*2])
+        meta = torch.cat([t1_emb, t2_emb, g_emb, meta_numeric], dim=-1)
+        meta_repr = self.meta_mlp(meta)
 
-        # Combine
+        h_h2h = self.h2h_encoder(h2h_seq)
+        h_t1  = self.team_encoder1(team1_seq)
+        h_t2  = self.team_encoder2(team2_seq)       
+
         combined = torch.cat([meta_repr, h_h2h, h_t1, h_t2], dim=-1)
-        goals = self.ff(combined)   # (B, 2)
+        goals = self.ff(combined)
 
-        # Optional: enforce non-negativity with softplus
         goals = F.softplus(goals)
 
-        return goals  # predicted [goals_team1, goals_team2]
+        return goals
 
 
 class FootballSequenceDataset(Dataset):
@@ -134,7 +121,7 @@ class FootballSequenceDataset(Dataset):
         self.y_goals = data["y_goals"]
 
         self.team_to_id = data["team_to_id"]
-        self.matches_df = data["matches_df"]  # optional, used for debugging
+        self.matches_df = data["matches_df"]
 
     def __len__(self):
         return self.y_goals.shape[0]

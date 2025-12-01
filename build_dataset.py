@@ -85,7 +85,6 @@ def build_match_history_tensors(
     team1_seq = np.zeros((N, k_form, hist_dim), dtype=np.float32)
     team2_seq = np.zeros((N, k_form, hist_dim), dtype=np.float32)
 
-    # histories
     team_hist = defaultdict(lambda: deque(maxlen=k_form))
     pair_hist = defaultdict(lambda: deque(maxlen=k_h2h))
 

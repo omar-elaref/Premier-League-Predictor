@@ -17,28 +17,23 @@ from print_results import *
 
 
 def make_time_split_loaders(dataset, batch_size=64):
-    
-    # Extract all seasons present in the dataset
-    seasons = dataset.matches_df["Season"].unique()
-    seasons_sorted = sorted(seasons)      # ensures correct season order
-    last_season = seasons_sorted[-1]      # choose the final season
 
-    # Build boolean mask for validation rows
+    seasons = dataset.matches_df["Season"].unique()
+    seasons_sorted = sorted(seasons)
+    last_season = seasons_sorted[-1]
+
     season_col = dataset.matches_df["Season"].values
     val_mask = (season_col == last_season)
 
-    # Indices for train and val
     val_idx = np.where(val_mask)[0]
     train_idx = np.where(~val_mask)[0]
 
     print(f"Validation Season: {last_season}")
     print(f"Train matches: {len(train_idx)}, Validation matches: {len(val_idx)}")
 
-    # Build subsets
     train_ds = Subset(dataset, train_idx)
     val_ds   = Subset(dataset, val_idx)
 
-    # Dataloaders
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
 
@@ -55,7 +50,6 @@ def to_device(batch, device):
             out[k] = v
     return out
 
-# training and evaluation functions
 def train_one_epoch(model, train_loader, optimizer, criterion, device):
     model.train()
     running_loss = 0.0
@@ -63,7 +57,7 @@ def train_one_epoch(model, train_loader, optimizer, criterion, device):
 
     for batch in train_loader:
         batch = to_device(batch, device)
-        y = batch["y"].float()                    # (B, 2) true goals
+        y = batch["y"].float()
 
         preds = model(
             batch["team1_ids"],
@@ -101,7 +95,7 @@ def evaluate(model, data_loader, criterion, device):
 
     for batch in data_loader:
         batch = to_device(batch, device)
-        y = batch["y"].float()                    # (B, 2)
+        y = batch["y"].float()
 
         preds = model(
             batch["team1_ids"],
@@ -120,16 +114,13 @@ def evaluate(model, data_loader, criterion, device):
         n_samples += bsz
         se_sum += ((preds - y) ** 2).sum().item()
 
-        # metrics 
-        # round goals to nearest int for accuracy metrics
-        pred_goals = torch.round(preds).long()      # (B, 2)
+        pred_goals = torch.round(preds).long()
         true_goals = y.long()
 
         exact_score_correct += (pred_goals == true_goals).all(dim=1).sum().item()
 
-        # W/D/L accuracy using a 0.5 draw margin on continuous preds
         true_diff = true_goals[:, 0] - true_goals[:, 1]
-        true_result = torch.sign(true_diff)      
+        true_result = torch.sign(true_diff)
 
         pred_diff = preds[:, 0] - preds[:, 1] 
 
@@ -159,9 +150,8 @@ train_loader, val_loader = make_time_split_loaders(dataset, batch_size=32)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# === build model ===
-hist_feat_dim = 7        # we defined 7 features in _game_features_from_perspective
-meta_numeric_dim = 3     # B365H, B365D, B365A
+hist_feat_dim = 7
+meta_numeric_dim = 3
 
 model = FootballScorePredictor(
     num_teams=len(dataset.team_to_id),
@@ -178,7 +168,6 @@ model = FootballScorePredictor(
 criterion = nn.PoissonNLLLoss(log_input=False)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, weight_decay=1e-4)
 
-# === training loop ===
 num_epochs = 25
 
 for epoch in range(1, num_epochs + 1):
